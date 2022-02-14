@@ -30,18 +30,23 @@ F1 is computed by:
 F1 = \frac{2TP}{ (2TP + FN + FP)}
 
 ## Installation
-The script requires OGR and GDAL, and pandas.
+First, a conda environment containing GDAL needs to be created:
 
-The following two lines should be edited to point to pertinent gdal directories:
-os.environ['GDAL_DATA'] = r'/path/to/gdal/directory/like/envs/env_name/share/gdal'
-os.environ['PROJ_LIB'] = r'/path/to/proj4/directory/like/envs/env_name/share/proj'
+    conda create --name raster_binary_validation -c conda-forge python=3.7 gdal=3.0.2
+    conda activate raster_binary_validation
+    
+The package itself can be installed by pip (from source or a repository):
+    
+    pip install raster_binary_validation
 
-this is needed in case vector file and tiff file are in different projections, thus script will automatically reproject 
-the vector file.
+In order to finish the setup of the GDAL environment, the following environment variables need to set:
+
+    export PROJ_LIB="[...]/miniconda/envs/gfm-sigma-offline/share/proj"
+    export GDAL_DATA="[...]/miniconda/envs/gfm-sigma-offline/share/gdal"
 
 ## Usage
 
-`python validate.py`
+`python raster_binary_validation.cli`
 
 "-in" or "--input_filepath" -- "Full file path to the binary raster data 1= presence, 0=absennce, for now 255=nodata."
 "-ex" or "--exclusion_filepath" -- "Full file path to the binary exclusion data 1= exclude, 
