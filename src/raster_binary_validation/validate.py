@@ -19,8 +19,8 @@ import math
 from osgeo import ogr
 import numpy as np
 import pandas as pd
-from raster_binary_validation.input import read_file, rasterize
-from raster_binary_validation.output import save_file
+from veranda.io.geotiff import GeoTiffFile
+from raster_binary_validation.input import rasterize
 
 
 def run(ras_data_filepath, v_val_data_filepath, diff_ras_out_filepath='val.tif',
@@ -31,22 +31,33 @@ def run(ras_data_filepath, v_val_data_filepath, diff_ras_out_filepath='val.tif',
 
     Parameters
     ----------
-    ras_data_filepath
-    v_val_data_filepath
-    diff_ras_out_filepath
-    v_reprojected_filepath
-    v_rasterized_filepath
-    out_csv_filepath
-    ex_filepath
+    ras_data_filepath: str
+        Path of classification result.
+    v_val_data_filepath: str
+        Path of reference data.
+    diff_ras_out_filepath: str, optional
+        Output path of the difference layer file (default: 'val.tif').
+    v_reprojected_filepath: str, optional
+        Output path of the reprojected vector layer file (default: 'reproj_tmp.shp').
+    v_rasterized_filepath: str, optional
+        Output path of the rasterized reference data (default: 'rasterized_val.tif').
+    out_csv_filepath: str, optional
+        Output path of the validation measures as csv file (default: 'val.csv').
+    ex_filepath: str, optional
+        Path of the exclusion layer which is not applied if set to None (default: None).
     """
 
     vec_ds = ogr.Open(v_val_data_filepath)
-    flood_data, gt, sref = read_file(ras_data_filepath)
+    with GeoTiffFile(ras_data_filepath, auto_decode=False) as src:
+        flood_data = src.read(return_tags=False)
+        gt = src.geotransform
+        sref = src.spatialref
 
     if ex_filepath is None:
         ex_data = None
     else:
-        ex_data = read_file(ex_filepath)[0]
+        with GeoTiffFile(ex_filepath, auto_decode=False) as src:
+            ex_data = src.read(return_tags=False)
 
     print('rasterizing')
     val_data = rasterize(vec_ds, v_rasterized_filepath, flood_data, gt, sref,
@@ -60,7 +71,8 @@ def run(ras_data_filepath, v_val_data_filepath, diff_ras_out_filepath='val.tif',
     # save results
     res = res.astype(np.uint8)
     res[~idx] = 255
-    save_file(diff_ras_out_filepath, res, nodata=255, gt=gt, sref=sref)
+    with GeoTiffFile(diff_ras_out_filepath, mode='w', count=1, geotransform=gt, spatialref=sref) as geotiff:
+        geotiff.write(res, band=1, nodata=[255])
 
     #
     dat = [['result 1', UA, PA, Ce, Oe, CSI, F1, SR, K, A]]
@@ -154,43 +166,3 @@ def validate(data, val_data, mask=None, data_nodata=255, val_nodata=255):
     print("Success Rate: %f" % (SR))
 
     return res, valid, UA, PA, Ce, Oe, CSI, F1, SR, K, A
-
-
-def validate_raster(in_filepath, val_filepath, results_filepath, exclusion_filepath=None):
-    """
-    Validates raster reference file with raster map. Assumes files are aligned, same projection and extent.
-
-    Parameters
-    ----------
-    in_filepath: str
-        Path of the input classification result.
-    val_filepath: str
-        Path of the reference data.
-    results_filepath: str
-        Path of the output omission/comission map.
-    exclusion_filepath: str, optional
-        Path of the exclusion layer to be applied on the other input layers.
-
-    Returns
-    -------
-    file_name: str
-        Name of the output map.
-    Several validation measures: float
-        Measures to describe the validation result (UA, PA, Ce, Oe, CSI, F1, SR, K, A).
-    """
-    # TODO: combine vector and raster validation functions and solve open issues
-    data, gt, sref = read_file(in_filepath)
-    val_data, gt_val, sref_val = read_file(val_filepath)
-
-    if exclusion_filepath is None:
-        exclusion_data = None
-    else:
-        exclusion_data = read_file(exclusion_filepath)[0]
-        # need to add projection check, assume same as validation data
-
-    res, idx, UA, PA, Ce, Oe, CSI, F1, SR, K, A = validate(data, val_data, mask=exclusion_data, data_nodata=255,
-                                                           val_nodata=255)
-
-    save_file(results_filepath, res, nodata=255, gt=gt, sref=sref)
-
-    return file_name, UA, PA, Ce, Oe, CSI, F1, SR, K, A

@@ -4,21 +4,6 @@ import numpy as np
 import os
 
 
-def read_file(path):
-    """ Helper function to read the first band of a raster file. """
-
-    gdal.AllRegister()
-    inDS = gdal.Open(path)
-    inBand = inDS.GetRasterBand(1)
-    data = inBand.ReadAsArray()
-    gt = inDS.GetGeoTransform()
-    sref = inDS.GetProjection()
-    inBand = None
-    inDS = None
-
-    return data, gt, sref
-
-
 def get_equi7grid_geotags(tile, sres=20, continent='EU'):
     """ Retrieve spatial details of an Equi7grid tile. """
     grid = Equi7Grid(sres).subgrids[continent]
