@@ -15,6 +15,7 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
+import os
 import math
 from osgeo import ogr
 import numpy as np
@@ -47,7 +48,7 @@ def run(ras_data_filepath, v_val_data_filepath, diff_ras_out_filepath='val.tif',
         Path of the exclusion layer which is not applied if set to None (default: None).
     """
 
-    vec_ds = ogr.Open(v_val_data_filepath)
+    print('Load classification result.')
     with GeoTiffFile(ras_data_filepath, auto_decode=False) as src:
         flood_data = src.read(return_tags=False)
         gt = src.geotransform
@@ -56,15 +57,26 @@ def run(ras_data_filepath, v_val_data_filepath, diff_ras_out_filepath='val.tif',
     if ex_filepath is None:
         ex_data = None
     else:
+        print('Load exclusion layer.')
         with GeoTiffFile(ex_filepath, auto_decode=False) as src:
             ex_data = src.read(return_tags=False)
 
-    print('rasterizing')
-    val_data = rasterize(vec_ds, v_rasterized_filepath, flood_data, gt, sref,
-                         v_reprojected_filepath=v_reprojected_filepath)
-    print('done ... rasterizing')
+    # handle reference data input
+    val_file_ext = os.path.splitext(os.path.basename(v_val_data_filepath))[1]
+    if val_file_ext == 'shp':
+        print('Load and rasterize vector reference data.')
+        vec_ds = ogr.Open(v_val_data_filepath)
+        val_data = rasterize(vec_ds, v_rasterized_filepath, flood_data, gt, sref,
+                             v_reprojected_filepath=v_reprojected_filepath)
+        print('Done ... rasterizing')
+    elif val_file_ext == 'tif':
+        print('Load raster reference data.')
+        with GeoTiffFile(v_val_data_filepath, auto_decode=False) as src:
+            val_data = src.read(return_tags=False)
+    else:
+        raise ValueError("Input file with extension " + val_file_ext + " is not supported.")
 
-    print('start validation')
+    print('Start validation')
     res, idx, UA, PA, Ce, Oe, CSI, F1, SR, K, A = validate(flood_data, val_data, mask=ex_data, data_nodata=255,
                                                            val_nodata=255)
 
@@ -80,7 +92,7 @@ def run(ras_data_filepath, v_val_data_filepath, diff_ras_out_filepath='val.tif',
                       columns=['file', "User's Accuracy/Precision", "Producer's Accuracy/Recall", 'Commission Error',
                                'Omission Error', 'Critical Success Index', 'F1', 'Success Rate', 'Kappa', 'Accuracy'])
     df.to_csv(out_csv_filepath)
-    print('end validation')
+    print('End validation')
 
 
 def validate(data, val_data, mask=None, data_nodata=255, val_nodata=255):
