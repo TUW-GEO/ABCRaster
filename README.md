@@ -29,23 +29,46 @@ CSI = \frac{TP}{ (TP + FP + FN)}
 F1 is computed by:
 F1 = \frac{2TP}{ (2TP + FN + FP)}
 
+Penalization function is computed by:
+P=exp\left(\frac{FP}{(TP+FN)/ln(1/2)}\right)                 
+
+Success Rate (SR) is computed by:
+SR = PA-(1-P)
+
+
 ## Installation
-The script requires OGR and GDAL, and pandas.
+First, a conda environment containing GDAL needs to be created:
 
-The following two lines should be edited to point to pertinent gdal directories:
-os.environ['GDAL_DATA'] = r'/path/to/gdal/directory/like/envs/env_name/share/gdal'
-os.environ['PROJ_LIB'] = r'/path/to/proj4/directory/like/envs/env_name/share/proj'
+    conda create --name raster_binary_validation -c conda-forge python=3.7 gdal=3.0.2
+    conda activate raster_binary_validation
 
-this is needed in case vector file and tiff file are in different projections, thus script will automatically reproject 
-the vector file.
+Aside from ogr/gdal the package requires the following dependencies:
+* Pandas
+* [Veranda](https://github.com/TUW-GEO/veranda)
+* [Equi7Grid](https://github.com/TUW-GEO/Equi7Grid)
+    
+The package itself can be installed by pip (from source or a repository):
+    
+    pip install raster_binary_validation
+
+In order to finish the setup of the GDAL environment, the following environment variables need to set:
+
+    export PROJ_LIB="[...]/miniconda/envs/raster_binary_validation/share/proj"
+    export GDAL_DATA="[...]/miniconda/envs/raster_binary_validation/share/gdal"
 
 ## Usage
 
-`python validate.py`
+`python raster_binary_validation.cli`
 
-"-in" or "--input_filepath" -- "Full file path to the binary raster data 1= presence, 0=absennce, for now 255=nodata."
-"-ex" or "--exclusion_filepath" -- "Full file path to the binary exclusion data 1= exclude, 
-for now 255=nodata"
-"-ref" or "--reference_shpfile" -- "Full file path to the validation shapefile (in any projection)"
-"-out" or "--output_raster" -- "Full file path to the final difference raster"
-"-csv" or "--output_csv" -- "Full file path to the csv results"
+`-in` or `--input_filepath` -- Full file path to the binary raster data 1= presence, 0=absennce, for now 255=nodata.
+
+`-ex` or `--exclusion_filepath` -- Full file path to the binary exclusion data 1= exclude, 
+for now 255=nodata
+
+`-ref` or `--reference_file` -- Full file path to the validation shapefile (.tif or .shp, in any projection)
+
+`-out` or `--output_raster` -- Full file path to the final difference raster
+
+`-csv` or `--output_csv` -- Full file path to the csv results (optional!)
+
+`-del` or `--delete_tmp` -- Option to delete temporary files (optional!)
