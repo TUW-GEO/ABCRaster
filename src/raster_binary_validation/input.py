@@ -144,6 +144,7 @@ def rasterize(vec_ds, out_ras_path, ras_data, gt, sref, v_reprojected_filepath='
         vec_layer = reProjDataSet.GetLayer()
 
     # burn polygons as presence,
+    # TODO: add attribute filtering for presence and absence
     # TODO: add elif to get attribute.
     gdal.RasterizeLayer(out_ds, [1], vec_layer, burn_values=[1])
     outBand = out_ds.GetRasterBand(1)

@@ -29,11 +29,23 @@ CSI = \frac{TP}{ (TP + FP + FN)}
 F1 is computed by:
 F1 = \frac{2TP}{ (2TP + FN + FP)}
 
+Penalization function is computed by:
+P=exp\left(\frac{FP}{(TP+FN)/ln(1/2)}\right)                 
+
+Success Rate (SR) is computed by:
+SR = PA-(1-P)
+
+
 ## Installation
 First, a conda environment containing GDAL needs to be created:
 
     conda create --name raster_binary_validation -c conda-forge python=3.7 gdal=3.0.2
     conda activate raster_binary_validation
+
+Aside from ogr/gdal the package requires the following dependencies:
+* Pandas
+* [Veranda](https://github.com/TUW-GEO/veranda)
+* [Equi7Grid](https://github.com/TUW-GEO/Equi7Grid)
     
 The package itself can be installed by pip (from source or a repository):
     
@@ -41,8 +53,8 @@ The package itself can be installed by pip (from source or a repository):
 
 In order to finish the setup of the GDAL environment, the following environment variables need to set:
 
-    export PROJ_LIB="[...]/miniconda/envs/gfm-sigma-offline/share/proj"
-    export GDAL_DATA="[...]/miniconda/envs/gfm-sigma-offline/share/gdal"
+    export PROJ_LIB="[...]/miniconda/envs/raster_binary_validation/share/proj"
+    export GDAL_DATA="[...]/miniconda/envs/raster_binary_validation/share/gdal"
 
 ## Usage
 

@@ -54,7 +54,7 @@ def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filena
 
     print('Load classification result.')
     with GeoTiffFile(ras_data_filepath, auto_decode=False) as src:
-        flood_data = src.read(return_tags=False)
+        input_data = src.read(return_tags=False)
         gt = src.geotransform
         sref = src.spatialref
 
@@ -73,7 +73,7 @@ def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filena
         v_rasterized_path = os.path.join(out_dirpath, v_rasterized_filename)
         v_reprojected_path = os.path.join(out_dirpath, v_reprojected_filename)
 
-        val_data = rasterize(vec_ds, v_rasterized_path, flood_data, gt, sref,
+        val_data = rasterize(vec_ds, v_rasterized_path, input_data, gt, sref,
                              v_reprojected_filepath=v_reprojected_path)
         print('Done ... rasterizing')
 
@@ -84,12 +84,12 @@ def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filena
     elif val_file_ext == '.tif':
         print('Load raster reference data.')
         with GeoTiffFile(v_val_data_filepath, auto_decode=False) as src:
-            val_data = src.read(return_tags=False)
+            val_data = src.read(return_tags=False) #TODO: add projecttion check and reprojection procedure
     else:
         raise ValueError("Input file with extension " + val_file_ext + " is not supported.")
 
     print('Start validation')
-    res, idx, UA, PA, Ce, Oe, CSI, F1, SR, K, A = validate(flood_data, val_data, mask=ex_data, data_nodata=255,
+    res, idx, UA, PA, Ce, Oe, CSI, F1, SR, K, A = validate(input_data, val_data, mask=ex_data, data_nodata=255,
                                                            val_nodata=255)
 
     # write difference map
@@ -101,8 +101,9 @@ def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filena
 
     # write csv summary
     if out_csv_filename is not None:
+        input_base_filename = os.path.basename(v_val_data_filepath)
         out_csv_path = os.path.join(out_dirpath, out_csv_filename)
-        dat = [['result 1', UA, PA, Ce, Oe, CSI, F1, SR, K, A]]
+        dat = [[input_base_filename, UA, PA, Ce, Oe, CSI, F1, SR, K, A]]
         df = pd.DataFrame(dat,
                           columns=['file', "User's Accuracy/Precision", "Producer's Accuracy/Recall",
                                    'Commission Error', 'Omission Error', 'Critical Success Index', 'F1', 'Success Rate',

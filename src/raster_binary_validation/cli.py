@@ -27,7 +27,7 @@ def command_line_interface():
     parser = argparse.ArgumentParser(
         description="Simple Binary Validation Workflow. Initially designed to validate floods")
     parser.add_argument("-in", "--input_filepath",
-                        help="Full file path to the binary raster data 1= presence, 0=absennce, for now 255=nodata.",
+                        help="Full file path to the binary raster data 1= presence, 0=absence, for now 255=nodata.",
                         required=True, type=str)
     parser.add_argument("-ex", "--exclusion_filepath",
                         help="Full file path to the binary exclusion data 1= exclude, for now 255=nodata.",
