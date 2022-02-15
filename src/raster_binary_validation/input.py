@@ -1,3 +1,20 @@
+# Copyright (c) 2022, Vienna University of Technology (TU Wien), Department
+# of Geodesy and Geoinformation (GEO).
+# All rights reserved.
+
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL VIENNA UNIVERSITY OF TECHNOLOGY,
+# DEPARTMENT OF GEODESY AND GEOINFORMATION BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
+# OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
 from equi7grid.equi7grid import Equi7Grid
 from osgeo import gdal, ogr, osr
 import numpy as np
@@ -75,86 +92,6 @@ def reproject_vec(layer, out_sref, v_reprojected_filepath='tmp.shp'):
     outLayer.SyncToDisk()
     outDataSet = None
     outLayer = None
-
-
-def rasterize2equi7(vec_ds, tile, sres, cont, v_reprojected_filepath='tmp.shp', bg_absence=True):
-    """
-    Transforms a vector to a raster layer and resamples it to teh Equi7grid.
-
-    Parameters
-    ----------
-    vec_ds: ogr vector layer
-        Vector layer to be rasterized.
-    tile: str
-        Equi7grid tile.
-    sres: int
-        Spatial sampling of the Equi7grid tile.
-    cont: str
-        Equi7grid continent code.
-    v_reprojected_filepath: str
-        Path of the temporary reprojected vector layer.
-    bg_absence: bool, optional
-        Option to limit comparison to the vector layer extent (default: True).
-
-    Returns
-    -------
-    out_ras_data: numpy.array
-        Resulting raster array.
-    """
-    # TODO: solve issue with missing output path parameter
-    gt, sref = get_equi7grid_geotags(tile, sres=sres, continent=cont)
-    t = int(tile[-1]) * 100000
-    rasterYSize = rasterXSize = int(t / sres)
-
-    gtiff_driver = gdal.GetDriverByName("GTiff")
-    out_ds = gtiff_driver.Create(out_ras_path, rasterXSize, rasterYSize, 1, gdal.GDT_Byte)
-    out_ds.SetGeoTransform(gt)
-    out_ds.SetProjection(sref)
-    vec_layer = vec_ds.GetLayer()
-
-    out_sref = osr.SpatialReference()
-    out_sref.ImportFromWkt(sref)
-
-    in_sref = vec_layer.GetSpatialRef()
-
-    if in_sref != out_sref:
-        print('reprojecting...')
-        reproject_vec(vec_layer, out_sref, v_reprojected_filepath)
-        print('done... reprojecting')
-
-        # returning layer object and using that to rasterize results it segmentation fault.
-        driver = ogr.GetDriverByName('ESRI Shapefile')
-        reProjDataSet = driver.Open(v_reprojected_filepath)
-        vec_layer = reProjDataSet.GetLayer()
-
-    # burn polygons as presence,
-    # TODO: add elif to get attribute.
-    gdal.RasterizeLayer(out_ds, [1], vec_layer, burn_values=[1])
-    outBand = out_ds.GetRasterBand(1)
-    outBand.SetNoDataValue(255)
-    out_ras_data = outBand.ReadAsArray()
-
-    output = np.empty_like(out_ras_data, dtype=np.uint8)
-    maxRow, maxCol = output.shape
-    output[:] = 255  # default nodata
-
-    if bg_absence:
-        # set no data as 0 or absence
-        v_ext = vec_layer.GetExtent()
-        row_start, row_end, col_start, col_end = bounding_box2offsets(v_ext, gt)
-        # overflow check
-        row_end = min([maxRow - 1, row_end])
-        col_end = min([maxCol - 1, col_end])
-        row_start = max([0, row_start])
-        col_start = max([0, col_start])
-        output[row_start:row_end, col_start:col_end] = 0
-    output[out_ras_data == 1] = 1
-    outBand.WriteArray(output)
-    out_ras_data = output
-
-    outBand = None
-    out_ds = None
-    return out_ras_data
 
 
 def rasterize(vec_ds, out_ras_path, ras_data, gt, sref, v_reprojected_filepath='tmp.shp', bg_absence=True):

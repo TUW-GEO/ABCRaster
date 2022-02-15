@@ -48,9 +48,15 @@ In order to finish the setup of the GDAL environment, the following environment 
 
 `python raster_binary_validation.cli`
 
-"-in" or "--input_filepath" -- "Full file path to the binary raster data 1= presence, 0=absennce, for now 255=nodata."
-"-ex" or "--exclusion_filepath" -- "Full file path to the binary exclusion data 1= exclude, 
-for now 255=nodata"
-"-ref" or "--reference_shpfile" -- "Full file path to the validation shapefile (in any projection)"
-"-out" or "--output_raster" -- "Full file path to the final difference raster"
-"-csv" or "--output_csv" -- "Full file path to the csv results"
+`-in` or `--input_filepath` -- Full file path to the binary raster data 1= presence, 0=absennce, for now 255=nodata.
+
+`-ex` or `--exclusion_filepath` -- Full file path to the binary exclusion data 1= exclude, 
+for now 255=nodata
+
+`-ref` or `--reference_file` -- Full file path to the validation shapefile (.tif or .shp, in any projection)
+
+`-out` or `--output_raster` -- Full file path to the final difference raster
+
+`-csv` or `--output_csv` -- Full file path to the csv results (optional!)
+
+`-del` or `--delete_tmp` -- Option to delete temporary files (optional!)

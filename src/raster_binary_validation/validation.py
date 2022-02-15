@@ -24,9 +24,9 @@ from veranda.io.geotiff import GeoTiffFile
 from raster_binary_validation.input import rasterize
 
 
-def run(ras_data_filepath, v_val_data_filepath, diff_ras_out_filepath='val.tif',
-        v_reprojected_filepath='reproj_tmp.shp', v_rasterized_filepath='rasterized_val.tif',
-        out_csv_filepath='val.csv', ex_filepath=None):
+def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filename='val.tif',
+        v_reprojected_filename='reproj_tmp.shp', v_rasterized_filename='rasterized_val.tif',
+        out_csv_filename='val.csv', ex_filepath=None, delete_tmp_files=False):
     """
     Runs the validation with vector data input (presence = 1, absence=0).
 
@@ -36,16 +36,20 @@ def run(ras_data_filepath, v_val_data_filepath, diff_ras_out_filepath='val.tif',
         Path of classification result.
     v_val_data_filepath: str
         Path of reference data.
-    diff_ras_out_filepath: str, optional
+    out_dirpath: str
+        Path of the output directory.
+    diff_ras_out_filename: str, optional
         Output path of the difference layer file (default: 'val.tif').
-    v_reprojected_filepath: str, optional
+    v_reprojected_filename: str, optional
         Output path of the reprojected vector layer file (default: 'reproj_tmp.shp').
-    v_rasterized_filepath: str, optional
+    v_rasterized_filename: str, optional
         Output path of the rasterized reference data (default: 'rasterized_val.tif').
-    out_csv_filepath: str, optional
-        Output path of the validation measures as csv file (default: 'val.csv').
+    out_csv_filename: str, optional
+        Output path of the validation measures as csv file. If set to None, no csv file is written (default: 'val.csv').
     ex_filepath: str, optional
         Path of the exclusion layer which is not applied if set to None (default: None).
+    delete_tmp_files: bool, optional
+        Option to delete all temporary files (default: False).
     """
 
     print('Load classification result.')
@@ -63,13 +67,21 @@ def run(ras_data_filepath, v_val_data_filepath, diff_ras_out_filepath='val.tif',
 
     # handle reference data input
     val_file_ext = os.path.splitext(os.path.basename(v_val_data_filepath))[1]
-    if val_file_ext == 'shp':
+    if val_file_ext == '.shp':
         print('Load and rasterize vector reference data.')
         vec_ds = ogr.Open(v_val_data_filepath)
-        val_data = rasterize(vec_ds, v_rasterized_filepath, flood_data, gt, sref,
-                             v_reprojected_filepath=v_reprojected_filepath)
+        v_rasterized_path = os.path.join(out_dirpath, v_rasterized_filename)
+        v_reprojected_path = os.path.join(out_dirpath, v_reprojected_filename)
+
+        val_data = rasterize(vec_ds, v_rasterized_path, flood_data, gt, sref,
+                             v_reprojected_filepath=v_reprojected_path)
         print('Done ... rasterizing')
-    elif val_file_ext == 'tif':
+
+        # delete temporary files if requested
+        if delete_tmp_files:
+            os.remove(v_rasterized_path)
+            os.remove(v_reprojected_path)
+    elif val_file_ext == '.tif':
         print('Load raster reference data.')
         with GeoTiffFile(v_val_data_filepath, auto_decode=False) as src:
             val_data = src.read(return_tags=False)
@@ -80,18 +92,23 @@ def run(ras_data_filepath, v_val_data_filepath, diff_ras_out_filepath='val.tif',
     res, idx, UA, PA, Ce, Oe, CSI, F1, SR, K, A = validate(flood_data, val_data, mask=ex_data, data_nodata=255,
                                                            val_nodata=255)
 
-    # save results
+    # write difference map
     res = res.astype(np.uint8)
     res[~idx] = 255
-    with GeoTiffFile(diff_ras_out_filepath, mode='w', count=1, geotransform=gt, spatialref=sref) as geotiff:
+    diff_ras_out_path = os.path.join(out_dirpath, diff_ras_out_filename)
+    with GeoTiffFile(diff_ras_out_path, mode='w', count=1, geotransform=gt, spatialref=sref) as geotiff:
         geotiff.write(res, band=1, nodata=[255])
 
-    #
-    dat = [['result 1', UA, PA, Ce, Oe, CSI, F1, SR, K, A]]
-    df = pd.DataFrame(dat,
-                      columns=['file', "User's Accuracy/Precision", "Producer's Accuracy/Recall", 'Commission Error',
-                               'Omission Error', 'Critical Success Index', 'F1', 'Success Rate', 'Kappa', 'Accuracy'])
-    df.to_csv(out_csv_filepath)
+    # write csv summary
+    if out_csv_filename is not None:
+        out_csv_path = os.path.join(out_dirpath, out_csv_filename)
+        dat = [['result 1', UA, PA, Ce, Oe, CSI, F1, SR, K, A]]
+        df = pd.DataFrame(dat,
+                          columns=['file', "User's Accuracy/Precision", "Producer's Accuracy/Recall",
+                                   'Commission Error', 'Omission Error', 'Critical Success Index', 'F1', 'Success Rate',
+                                   'Kappa', 'Accuracy'])
+        df.to_csv(out_csv_path)
+
     print('End validation')
 
 
