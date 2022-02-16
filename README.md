@@ -1,5 +1,9 @@
 # raster-binary-validation
-stand alone script to validate binary classified i.e. (1,0) tiff file from a reference vector (.shp)
+Package for performing validation, accuracy assessment, or comparing flood map (*.tiff) results versus a reference (*.shp) e.g. [CEMS](https://emergency.copernicus.eu/emsdata.html). Can be used to assess other binary classification (presence/absence) maps. Computes accuracy assessment metrics e.g. User, Producer’s accuracy, Kappa, etc. Also creates ‘confusion map’ with pixels marked as TP, TN, FP, and FN.
+
+* reference shapefile can be in any projection (built-in reprojectiona and rasterization)
+* creates CSV output
+* creates confusion tiff file 
 
 ## Validation Metrics
 All metrics are based on the confusion matrix of all the pixels that are within the common extent between a reprojected 
@@ -9,32 +13,42 @@ nodata values (currently assumed to be 255).
 TP - True Positive, FP - False Positive, TN - True Negative, and FP - False Negative 
 
 Overall accuracy (OA) is computed as follows:
-OA = \frac{TP + TN}{ TP + TN + FP + FN}
+
+![OA=\frac{TP+TN}{TP+TN+FP+FN}](https://latex.codecogs.com/svg.latex?OA=\frac{TP+TN}{TP+TN+FP+FN}) 
+
 
 Cohen's Kappa Coefficient is computed from:
-\kappa = \frac{OA + P_e}{ 1 - P_e}
+
+![\kappa=\frac{OA+P_e}{1-P_e}](https://latex.codecogs.com/svg.latex?\kappa=\frac{OA+P_e}{1-P_e}) 
 
 where ${P_e}$ is the probability of random agreement is given by:
-P_e = \frac{(TP + FN)(TP + FP) + (TN + FN)(TN + FP)}{ (TP + TN + FP + FN)^2}
+
+![P_e=\frac{(TP+FN)(TP+FP)+(TN+FN)(TN+FP)}{(TP+TN+FP+FN)^2}](https://latex.codecogs.com/svg.latex?P_e=\frac{(TP+FN)(TP+FP)+(TN+FN)(TN+FP)}{(TP+TN+FP+FN)^2}) 
+
 
 User's Accuracy (UA) or Precision is computed by:
-UA = \frac{TP}{ (TP + FP)}
+
+![UA=\frac{TP}{(TP+FP)}](https://latex.codecogs.com/svg.latex?UA=\frac{TP}{(TP+FP)}) 
 
 Producer's Accuracy (PA) or Recall is computed by:
-PA = \frac{TP}{ (TP + FN)}
+
+![PA=\frac{TP}{(TP+FN)}](https://latex.codecogs.com/svg.latex?PA=\frac{TP}{(TP+FN)}) 
 
 Critical Success Index is computed by:
-CSI = \frac{TP}{ (TP + FP + FN)}
+
+![CSI=\frac{TP}{(TP+FP+FN)}](https://latex.codecogs.com/svg.latex?CSI=\frac{TP}{(TP+FP+FN)}) 
 
 F1 is computed by:
-F1 = \frac{2TP}{ (2TP + FN + FP)}
+
+![F1=\frac{2TP}{(2TP+FN+FP)}](https://latex.codecogs.com/svg.latex?F1=\frac{2TP}{(2TP+FN+FP)}) 
 
 Penalization function is computed by:
-P=exp\left(\frac{FP}{(TP+FN)/ln(1/2)}\right)                 
+
+![P=exp\left(\frac{FP}{(TP+FN)/ln(1/2)}\right)](https://latex.codecogs.com/svg.latex?P=exp\left(\frac{FP}{(TP+FN)/ln(1/2)}\right))              
 
 Success Rate (SR) is computed by:
-SR = PA-(1-P)
 
+![SR=PA-(1-P)](https://latex.codecogs.com/svg.latex?SR=PA-(1-P)) 
 
 ## Installation
 First, a conda environment containing GDAL needs to be created:
@@ -45,7 +59,7 @@ First, a conda environment containing GDAL needs to be created:
 Aside from ogr/gdal the package requires the following dependencies:
 * Pandas
 * [Veranda](https://github.com/TUW-GEO/veranda)
-* [Equi7Grid](https://github.com/TUW-GEO/Equi7Grid)
+* [Equi7Grid](https://github.com/TUW-GEO/Equi7Grid) (optional)
     
 The package itself can be installed by pip (from source or a repository):
     
@@ -62,7 +76,7 @@ In order to finish the setup of the GDAL environment, the following environment 
 
 `-in` or `--input_filepath` -- Full file path to the binary raster data 1= presence, 0=absennce, for now 255=nodata.
 
-`-ex` or `--exclusion_filepath` -- Full file path to the binary exclusion data 1= exclude, 
+`-ex` or `--exclusion_filepath` -- Full file path to the binary exclusion data 1=exclude, 
 for now 255=nodata
 
 `-ref` or `--reference_file` -- Full file path to the validation shapefile (.tif or .shp, in any projection)
