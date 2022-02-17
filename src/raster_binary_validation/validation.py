@@ -84,8 +84,8 @@ def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filena
 
         # delete temporary files if requested
         if delete_tmp_files:
-            os.remove(v_rasterized_path)
-            os.remove(v_reprojected_path)
+            delete_shapefile(v_rasterized_path)
+            delete_shapefile(v_reprojected_path)
     elif val_file_ext == '.tif':
         print('Load raster reference data.')
         with GeoTiffFile(v_val_data_filepath, auto_decode=False) as src:
@@ -207,3 +207,10 @@ def validate(data, val_data, mask=None, data_nodata=255, val_nodata=255):
     print("Success Rate: %f" % (SR))
 
     return res, valid, UA, PA, Ce, Oe, CSI, F1, SR, K, A
+
+
+def delete_shapefile(shp_path):
+    """ Deletes all files from which belong to a shapefile. """
+    driver = ogr.GetDriverByName("ESRI Shapefile")
+    if os.path.exists(shp_path):
+        driver.DeleteDataSource(shp_path)
