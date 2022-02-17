@@ -84,7 +84,7 @@ def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filena
 
         # delete temporary files if requested
         if delete_tmp_files:
-            delete_shapefile(v_rasterized_path)
+            os.remove(v_rasterized_path)
             delete_shapefile(v_reprojected_path)
     elif val_file_ext == '.tif':
         print('Load raster reference data.')
