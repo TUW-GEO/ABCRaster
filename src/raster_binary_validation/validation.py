@@ -50,6 +50,11 @@ def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filena
         Path of the exclusion layer which is not applied if set to None (default: None).
     delete_tmp_files: bool, optional
         Option to delete all temporary files (default: False).
+
+    Returns
+    -------
+    val_measures: dict
+        Dictionary containing the resulting validation measures.
     """
 
     print('Load classification result.')
@@ -100,8 +105,8 @@ def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filena
         geotiff.write(res, band=1, nodata=[255])
 
     # write csv summary
+    input_base_filename = os.path.basename(v_val_data_filepath)
     if out_csv_filename is not None:
-        input_base_filename = os.path.basename(v_val_data_filepath)
         out_csv_path = os.path.join(out_dirpath, out_csv_filename)
         dat = [[input_base_filename, UA, PA, Ce, Oe, CSI, F1, SR, K, A]]
         df = pd.DataFrame(dat,
@@ -110,7 +115,13 @@ def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filena
                                    'Kappa', 'Accuracy'])
         df.to_csv(out_csv_path)
 
+    # return validation measures as dictionary
+    val_measures = {'file': input_base_filename, "User's Accuracy/Precision": UA, "Producer's Accuracy/Recall": PA,
+                    'Commission Error': Ce, 'Omission Error': Oe, 'Critical Success Index': CSI, 'F1': F1,
+                    'Success Rate': SR, 'Kappa': K, 'Accuracy': A}
+
     print('End validation')
+    return val_measures
 
 
 def validate(data, val_data, mask=None, data_nodata=255, val_nodata=255):
