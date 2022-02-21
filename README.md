@@ -58,7 +58,7 @@ First, a conda environment containing GDAL needs to be created:
 
 Aside from ogr/gdal the package requires the following dependencies:
 * Pandas
-* [Veranda](https://github.com/TUW-GEO/veranda)
+* [Veranda](https://github.com/TUW-GEO/veranda) v0.1.0
 * [Equi7Grid](https://github.com/TUW-GEO/Equi7Grid) (optional)
     
 The package itself can be installed by pip (from source or a repository):

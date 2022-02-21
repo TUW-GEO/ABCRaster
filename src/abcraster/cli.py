@@ -61,7 +61,7 @@ def command_line_interface():
     if delete_tmp is None:
         delete_tmp = False
 
-    run(ras_data_filepath=input_raster_filepath, v_val_data_filepath=validation_filepath, out_dirpath=out_dirpath,
+    run(ras_data_filepath=input_raster_filepath, ref_data_filepath=validation_filepath, out_dirpath=out_dirpath,
         diff_ras_out_filename=out_raster_filename, v_reprojected_filename=reproj_shp_filepath,
         v_rasterized_filename=rasterized_shp_filepath, out_csv_filename=output_csv_filepath,
         ex_filepath=exclusion_filepath, delete_tmp_files=delete_tmp)
