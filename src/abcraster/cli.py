@@ -15,7 +15,7 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-from raster_binary_validation.validation import run
+from abcraster.accuracy_assessment import run
 import argparse
 import os
 

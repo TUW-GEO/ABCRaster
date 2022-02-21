@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-    Setup file for raster_binary_validation.
+    Setup file for abcraster.
     Use setup.cfg to configure your project.
 
     This file was generated with PyScaffold 3.3.1.

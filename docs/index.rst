@@ -1,8 +1,8 @@
 ========================
-raster_binary_validation
+abcraster
 ========================
 
-This is the documentation of **raster_binary_validation**.
+This is the documentation of **abcraster**.
 
 .. note::
 

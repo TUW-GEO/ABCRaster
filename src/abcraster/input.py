@@ -14,8 +14,6 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-from equi7grid.equi7grid import Equi7Grid
 from osgeo import gdal, ogr, osr
 import numpy as np
 import os
@@ -23,6 +21,7 @@ import os
 
 def get_equi7grid_geotags(tile, sres=20, continent='EU'):
     """ Retrieve spatial details of an Equi7grid tile. """
+    from equi7grid.equi7grid import Equi7Grid  # moved import here to make equi7grid optional
     grid = Equi7Grid(sres).subgrids[continent]
     tile_geotags = grid.tilesys.create_tile(name=tile).get_geotags()
     gt, sref = tile_geotags['geotransform'], tile_geotags['spatialreference']

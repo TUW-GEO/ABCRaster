@@ -21,11 +21,11 @@ from osgeo import ogr
 import numpy as np
 import pandas as pd
 from veranda.io.geotiff import GeoTiffFile
-from raster_binary_validation.input import rasterize
+from abcraster.input import rasterize
 
 
-def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filename='val.tif',
-        v_reprojected_filename='reproj_tmp.shp', v_rasterized_filename='rasterized_val.tif',
+def run(ras_data_filepath, ref_data_filepath, out_dirpath, diff_ras_out_filename='val.tif',
+        v_reprojected_filename='reproj_tmp.shp', v_rasterized_filename='rasterized_ref.tif',
         out_csv_filename='val.csv', ex_filepath=None, delete_tmp_files=False):
     """
     Runs the validation with vector data input (presence = 1, absence=0).
@@ -33,8 +33,8 @@ def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filena
     Parameters
     ----------
     ras_data_filepath: str
-        Path of classification result.
-    v_val_data_filepath: str
+        Path of binary classified raster tiff file.
+    ref_data_filepath: str
         Path of reference data.
     out_dirpath: str
         Path of the output directory.
@@ -71,14 +71,14 @@ def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filena
             ex_data = src.read(return_tags=False)
 
     # handle reference data input
-    val_file_ext = os.path.splitext(os.path.basename(v_val_data_filepath))[1]
-    if val_file_ext == '.shp':
+    ref_file_ext = os.path.splitext(os.path.basename(ref_data_filepath))[1]
+    if ref_file_ext == '.shp':
         print('Load and rasterize vector reference data.')
-        vec_ds = ogr.Open(v_val_data_filepath)
+        vec_ds = ogr.Open(ref_data_filepath)
         v_rasterized_path = os.path.join(out_dirpath, v_rasterized_filename)
         v_reprojected_path = os.path.join(out_dirpath, v_reprojected_filename)
 
-        val_data = rasterize(vec_ds, v_rasterized_path, input_data, gt, sref,
+        ref_data = rasterize(vec_ds, v_rasterized_path, input_data, gt, sref,
                              v_reprojected_filepath=v_reprojected_path)
         print('Done ... rasterizing')
 
@@ -86,16 +86,16 @@ def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filena
         if delete_tmp_files:
             os.remove(v_rasterized_path)
             delete_shapefile(v_reprojected_path)
-    elif val_file_ext == '.tif':
+    elif ref_file_ext == '.tif':
         print('Load raster reference data.')
-        with GeoTiffFile(v_val_data_filepath, auto_decode=False) as src:
-            val_data = src.read(return_tags=False) #TODO: add projecttion check and reprojection procedure
+        with GeoTiffFile(ref_data_filepath, auto_decode=False) as src:
+            ref_data = src.read(return_tags=False)  # TODO: add projecttion check and reprojection procedure
     else:
-        raise ValueError("Input file with extension " + val_file_ext + " is not supported.")
+        raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
 
     print('Start validation')
-    res, idx, UA, PA, Ce, Oe, CSI, F1, SR, K, A = validate(input_data, val_data, mask=ex_data, data_nodata=255,
-                                                           val_nodata=255)
+    res, idx, UA, PA, Ce, Oe, CSI, F1, SR, K, A = accuracy_assessment(input_data, ref_data, mask=ex_data,
+                                                                      data_nodata=255, ref_nodata=255)
 
     # write difference map
     res = res.astype(np.uint8)
@@ -105,7 +105,7 @@ def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filena
         geotiff.write(res, band=1, nodata=[255])
 
     # write csv summary
-    input_base_filename = os.path.basename(v_val_data_filepath)
+    input_base_filename = os.path.basename(ref_data_filepath)
     if out_csv_filename is not None:
         out_csv_path = os.path.join(out_dirpath, out_csv_filename)
         dat = [[input_base_filename, UA, PA, Ce, Oe, CSI, F1, SR, K, A]]
@@ -124,7 +124,7 @@ def run(ras_data_filepath, v_val_data_filepath, out_dirpath, diff_ras_out_filena
     return val_measures
 
 
-def validate(data, val_data, mask=None, data_nodata=255, val_nodata=255):
+def accuracy_assessment(data, ref_data, mask=None, data_nodata=255, ref_nodata=255):
     """
     Runs validation on aligned numpy arrays.
 
@@ -132,13 +132,13 @@ def validate(data, val_data, mask=None, data_nodata=255, val_nodata=255):
     ----------
     data: numpy.array
         Binary classification result which will be validated.
-    val_data: numpy.array
+    ref_data: numpy.array
         Binary reference data array.
     mask: numpy.array
         Binary mask to be applied on both input arrays.
     data_nodata: int, optional
         No data value of the classification result (default: 255).
-    val_nodata: int, optional
+    ref_nodata: int, optional
         No data value of the reference data (default: 255).
 
     Returns
@@ -167,14 +167,14 @@ def validate(data, val_data, mask=None, data_nodata=255, val_nodata=255):
         Accuracy
     """
 
-    res = 1 + (2 * data) - val_data
+    res = 1 + (2 * data) - ref_data
     res[data == data_nodata] = 255
-    res[val_data == val_nodata] = 255
+    res[ref_data == ref_nodata] = 255
 
     if mask is not None:
         res[mask == 1] = 255
         data[mask == 1] = 255  # applying exclusion, setting exclusion pixels as no data
-    valid = np.logical_and(val_data != 255, data != 255)  # index removing no data from comparison
+    valid = np.logical_and(ref_data != 255, data != 255)  # index removing no data from comparison
 
     TP = np.sum(res == 2)
     TN = np.sum(res == 1)
@@ -195,16 +195,16 @@ def validate(data, val_data, mask=None, data_nodata=255, val_nodata=255):
     P = math.exp(FP / ((TP + FN) / math.log(0.5)))  # penalization as defined in ACube4Floods 5.1
     SR = PA - (1 - P)  # Success rate as defined in ACube4Floods 5.1
 
-    print("User's Accuracy/Precision: %f" % (UA))
-    print("Producer's Accuracy/Recall/PP2: %f" % (PA))
-    print("Critical Success In: %f" % (CSI))
-    print("F1: %f" % (F1))
-    print("commission error: %f" % (Ce))
-    print("omission error: %f" % (Oe))
-    print("total accuracy: %f" % (A))
-    print("kappa: %f" % (K))
-    print("Penalization Function: %f" % (P))
-    print("Success Rate: %f" % (SR))
+    print("User's Accuracy/Precision: %f" % UA)
+    print("Producer's Accuracy/Recall/PP2: %f" % PA)
+    print("Critical Success In: %f" % CSI)
+    print("F1: %f" % F1)
+    print("commission error: %f" % Ce)
+    print("omission error: %f" % Oe)
+    print("total accuracy: %f" % A)
+    print("kappa: %f" % K)
+    print("Penalization Function: %f" % P)
+    print("Success Rate: %f" % SR)
 
     return res, valid, UA, PA, Ce, Oe, CSI, F1, SR, K, A
 

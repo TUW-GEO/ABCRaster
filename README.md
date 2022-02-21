@@ -1,13 +1,13 @@
-# raster-binary-validation
-Package for performing validation, accuracy assessment, or comparing flood map (*.tiff) results versus a reference (*.shp) e.g. [CEMS](https://emergency.copernicus.eu/emsdata.html). Can be used to assess other binary classification (presence/absence) maps. Computes accuracy assessment metrics e.g. User, Producer’s accuracy, Kappa, etc. Also creates ‘confusion map’ with pixels marked as TP, TN, FP, and FN.
+# ABCRaster
+ABCRaster stands for Accuracy assessment of Binary Classified Raster. It is a package for performing validation, accuracy assessment, or comparing flood map (*.tiff) results versus a reference (*.shp) e.g. [CEMS](https://emergency.copernicus.eu/emsdata.html). Can be used to assess other binary classification (presence/absence) maps. Computes accuracy assessment metrics e.g. User, Producer’s accuracy, Kappa, etc. Also creates ‘confusion map’ with pixels marked as TP, TN, FP, and FN.
 
 * reference shapefile can be in any projection (built-in reprojectiona and rasterization)
 * creates CSV output
-* creates confusion tiff file 
+* creates confusion (difference) tiff file 
 
-## Validation Metrics
+## Accuracy Metrics
 All metrics are based on the confusion matrix of all the pixels that are within the common extent between a reprojected 
-and rasterized version of the shapefile, less excluded pixels (exclusion tiff file, if present) and 
+and rasterized version of the shapefile, less excluded pixels (exclusion tiff file), if present and 
 nodata values (currently assumed to be 255).
 
 TP - True Positive, FP - False Positive, TN - True Negative, and FP - False Negative 
@@ -53,8 +53,8 @@ Success Rate (SR) is computed by:
 ## Installation
 First, a conda environment containing GDAL needs to be created:
 
-    conda create --name raster_binary_validation -c conda-forge python=3.7 gdal=3.0.2
-    conda activate raster_binary_validation
+    conda create --name abcraster -c conda-forge python=3.7 gdal=3.0.2
+    conda activate abcraster
 
 Aside from ogr/gdal the package requires the following dependencies:
 * Pandas
@@ -63,16 +63,17 @@ Aside from ogr/gdal the package requires the following dependencies:
     
 The package itself can be installed by pip (from source or a repository):
     
-    pip install raster_binary_validation
+    pip install abcraster
 
 In order to finish the setup of the GDAL environment, the following environment variables need to set:
 
-    export PROJ_LIB="[...]/miniconda/envs/raster_binary_validation/share/proj"
-    export GDAL_DATA="[...]/miniconda/envs/raster_binary_validation/share/gdal"
+    export PROJ_LIB="[...]/miniconda/envs/abcraster/share/proj"
+    export GDAL_DATA="[...]/miniconda/envs/abcraster/share/gdal"
 
+** to get the path your conda envirment you can use `echo $CONDA_PREFIX` on Linux or  `echo %CONDA_PREFIX%` on Windows
 ## Usage
 
-`python raster_binary_validation.cli`
+`python abcraster.cli`
 
 `-in` or `--input_filepath` -- Full file path to the binary raster data 1= presence, 0=absennce, for now 255=nodata.
 
