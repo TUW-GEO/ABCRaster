@@ -1,7 +1,7 @@
 # ABCRaster
 ABCRaster stands for Accuracy assessment of Binary Classified Raster. It is a package for performing validation, accuracy assessment, or comparing flood map (*.tiff) results versus a reference (*.shp) e.g. [CEMS](https://emergency.copernicus.eu/emsdata.html). Can be used to assess other binary classification (presence/absence) maps. Computes accuracy assessment metrics e.g. User, Producer’s accuracy, Kappa, etc. Also creates ‘confusion map’ with pixels marked as TP, TN, FP, and FN.
 
-* reference shapefile can be in any projection (built-in reprojectiona and rasterization)
+* reference shapefile can be in any projection (built-in reprojection and rasterization)
 * creates CSV output
 * creates confusion (difference) tiff file 
 
@@ -73,7 +73,7 @@ In order to finish the setup of the GDAL environment, the following environment 
 ** to get the path your conda envirment you can use `echo $CONDA_PREFIX` on Linux or  `echo %CONDA_PREFIX%` on Windows
 ## Usage
 
-`python abcraster.cli`
+`python -m abcraster.cli`
 
 `-in` or `--input_filepath` -- Full file path to the binary raster data 1= presence, 0=absennce, for now 255=nodata.
 
