@@ -22,9 +22,10 @@ import numpy as np
 import pandas as pd
 from veranda.io.geotiff import GeoTiffFile
 from abcraster.input import rasterize
+from abcraster.sampling import gen_random_sample
 
 
-def run(ras_data_filepath, ref_data_filepath, out_dirpath, diff_ras_out_filename='val.tif',
+def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath = None, sampling=None, diff_ras_out_filename='val.tif',
         v_reprojected_filename='reproj_tmp.shp', v_rasterized_filename='rasterized_ref.tif',
         out_csv_filename='val.csv', ex_filepath=None, delete_tmp_files=False):
     """
@@ -38,6 +39,11 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, diff_ras_out_filename
         Path of reference data.
     out_dirpath: str
         Path of the output directory.
+    sample_filepath: str, optional
+        Path of sampling raster (default: None)
+    sampling: list int, optional
+        list of number samples, matching iterable index to class encoding
+        If None, this implies samples are loaded from sample_filepath (default: None)
     diff_ras_out_filename: str, optional
         Output path of the difference layer file (default: 'val.tif').
     v_reprojected_filename: str, optional
@@ -93,8 +99,23 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, diff_ras_out_filename
     else:
         raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
 
+    #sampling logic
+    if sample_filepath is None: #no sampling
+        samples = None
+    else:
+        if sampling is None:
+            #assumes there is a sampling raster existing, then reads it
+            with GeoTiffFile(sample_filepath, auto_decode=False) as src:
+                samples = src.read(return_tags=False)
+        else:
+            #performs sampling
+            samples = gen_random_sample(sampling, input_datadata, ref_data, nodata=255)
+            with GeoTiffFile(sample_filepath, mode='w', count=1, geotransform=gt, spatialref=sref) as src:
+                src.write(samples, band=1, nodata=255)
+
     print('Start validation')
     res, idx, UA, PA, Ce, Oe, CSI, F1, SR, K, A = accuracy_assessment(input_data, ref_data, mask=ex_data,
+                                                                      samples=samples, samples_nodata=255,
                                                                       data_nodata=255, ref_nodata=255)
 
     # write difference map
@@ -124,7 +145,7 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, diff_ras_out_filename
     return val_measures
 
 
-def accuracy_assessment(data, ref_data, mask=None, data_nodata=255, ref_nodata=255):
+def accuracy_assessment(data, ref_data, mask=None, samples=None, data_nodata=255, ref_nodata=255, samples_nodata=255):
     """
     Runs validation on aligned numpy arrays.
 
@@ -136,10 +157,14 @@ def accuracy_assessment(data, ref_data, mask=None, data_nodata=255, ref_nodata=2
         Binary reference data array.
     mask: numpy.array
         Binary mask to be applied on both input arrays.
+    samples: numpy.array
+        sampling mask
     data_nodata: int, optional
         No data value of the classification result (default: 255).
     ref_nodata: int, optional
         No data value of the reference data (default: 255).
+    samples_nodata: int, optional
+        No data value of the sampling raster (default: 255).
 
     Returns
     -------
@@ -174,7 +199,12 @@ def accuracy_assessment(data, ref_data, mask=None, data_nodata=255, ref_nodata=2
     if mask is not None:
         res[mask == 1] = 255
         data[mask == 1] = 255  # applying exclusion, setting exclusion pixels as no data
-    valid = np.logical_and(ref_data != 255, data != 255)  # index removing no data from comparison
+    valid = np.logical_and(ref_data != 255, data != 255)  # index removing no data from comparison raster
+
+    ras_result = res
+
+    if samples is not None:
+        res = res[samples != samples_nodata]
 
     TP = np.sum(res == 2)
     TN = np.sum(res == 1)
@@ -206,7 +236,7 @@ def accuracy_assessment(data, ref_data, mask=None, data_nodata=255, ref_nodata=2
     print("Penalization Function: %f" % P)
     print("Success Rate: %f" % SR)
 
-    return res, valid, UA, PA, Ce, Oe, CSI, F1, SR, K, A
+    return ras_result, valid, UA, PA, Ce, Oe, CSI, F1, SR, K, A
 
 
 def delete_shapefile(shp_path):

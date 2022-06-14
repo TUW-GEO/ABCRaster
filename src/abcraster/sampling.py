@@ -18,55 +18,58 @@ import os, argparse
 from veranda.io.geotiff import GeoTiffFile
 import numpy as np
 
-def gen_random_sample(n, data, ref, num_class=2, nodata=255, strat=True):
+def gen_random_sample(num_samples, data, ref, nodata=255):
     """
         Creates a numpy array mask of randomly selected samples given a reference and input classified data.
 
         Parameters
         ----------
-        n: int
-            number of samples, should be divisible by num_class
-        data: numpy Array
+        num_samples: list - int
+            number of samples where iterable index matches class encoding,
+            for non-stratified sampling pass a singleton
+        data: numpy.array
             (binary) classified data, assumes uint encoded
-        ref: numpy Array
+        ref: numpy.array
             reference data, assumes same data format and projection as data
-        num_class: int, optional
-            number of classes
         nodata: int, optional
             nodata value, assumes the same for both reference and input data
-        strat: boolean, optional
-            is stratified sampling
+
+        Returns
+        -------
+        samples: numpy.array - uint8
+            encoding: non-strtified 1 - selected, 0 - not selected; stratified class value
     """
 
     assert(data.shape == ref.shape)
-    assert(n % num_class == 0)
 
-    samples = np.zeros_like(data, dtype=np.uint8)
+    samples = np.ones_like(data, dtype=np.uint8) * nodata
     x_size, y_size = data.shape
 
-    if strat:
+    num_class = len(num_samples)
+
+    if num_class > 1:
         for i in range(num_class):
             cnt = 0
-            while cnt < n / num_class:
+            while cnt < num_samples[i]:
                 x = np.random.random_integers(0, x_size - 1)
                 y = np.random.random_integers(0, y_size - 1)
 
-                if data[x, y] != nodata and ref[x, y] == i and samples[x, y] == 0:
-                    samples[x, y] = 1
+                if data[x, y] != nodata and ref[x, y] == i and samples[x, y] == nodata:
+                    samples[x, y] = i #set to ref sam
                     cnt += 1
     else:
         cnt = 0
-        while cnt < n:
+        while cnt < num_samples[0]:
             x = np.random.random_integers(0, x_size - 1)
             y = np.random.random_integers(0, y_size - 1)
 
-            if data[x, y] != nodata and ref[x, y] != nodata and samples[x, y] == 0:
+            if data[x, y] != nodata and ref[x, y] != nodata and samples[x, y] == nodata:
                 samples[x, y] = 1
                 cnt += 1
 
     return samples
 
-def path_wrapper(n, data_path, ref_path, out_path, num_class=2, nodata=255, strat=True):
+def path_wrapper(num_samples, data_path, ref_path, out_path, nodata=255):
     """
     Wraps genrate samples as a function opening the input files
     """
@@ -84,7 +87,7 @@ def path_wrapper(n, data_path, ref_path, out_path, num_class=2, nodata=255, stra
     assert(ref_gt == data_gt)
     assert(ref_sref == data_sref)
 
-    samples = gen_random_sample(n, data, ref, num_class=num_class, nodata=nodata, strat=strat)
+    samples = gen_random_sample(num_samples, data, ref, nodata=nodata)
 
     with GeoTiffFile(out_path, mode='w', count=1, geotransform=gt, spatialref=sref) as src:
         src.write(samples, band=1, nodata=nodata)
@@ -123,8 +126,12 @@ def command_line_interface():
     nodata = args.nodata
     strat = args.stratify
 
-    path_wrapper(n, data_path, ref_path, out_path, num_class=2, nodata=nodata, strat=strat)
+    if strat:
+        num_samples = [n/2, n/2]
+    else:
+        num_samples = [n]
 
+    path_wrapper(num_samples, data_path, ref_path, out_path, nodata=nodata)
 
 if __name__ == '__main__':
     command_line_interface()
