@@ -110,12 +110,14 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath=None,
             with GeoTiffFile(sample_filepath, auto_decode=False) as src:
                 # assumes there is a sampling raster existing, then reads it
                 samples = src.read(return_tags=False)
-            samples = samples == 1
+            samples = samples != 255
         else:
             # performs sampling
             samples = gen_random_sample(sampling, input_data, ref_data, nodata=255)
+            sample_output = np.where(samples, ref_data, 255)
+            sample_output = sample_output.astype(np.uint8)
             with GeoTiffFile(sample_filepath, mode='w', count=1, geotransform=gt, spatialref=sref) as src:
-                src.write(samples.astype(np.uint8), band=1, nodata=255)
+                src.write(sample_output, band=1, nodata=[255])
 
     print('Start validation')
     res, idx, UA, PA, Ce, Oe, CSI, F1, SR, K, A = accuracy_assessment(input_data, ref_data, mask=ex_data,
