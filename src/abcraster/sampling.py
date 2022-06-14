@@ -113,9 +113,9 @@ def random_conditional_selection(arr, num, apriori_mask, cond=None):
     return np.unravel_index(idx, arr.shape)
 
 
-def path_wrapper(num_samples, data_path, ref_path, out_path, nodata=255):
+def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255):
     """
-    Wraps genrate samples as a function opening the input files
+    Runs the sampling step without the accuracy assessment.
     """
 
     with GeoTiffFile(data_path, auto_decode=False) as src:
@@ -133,8 +133,8 @@ def path_wrapper(num_samples, data_path, ref_path, out_path, nodata=255):
 
     samples = gen_random_sample(num_samples, data, ref, nodata=nodata)
 
-    with GeoTiffFile(out_path, mode='w', count=1, geotransform=gt, spatialref=sref) as src:
-        src.write(samples, band=1, nodata=nodata)
+    with GeoTiffFile(out_path, mode='w', count=1, geotransform=ref_gt, spatialref=ref_sref) as src:
+        src.write(samples.astype(np.uint8), band=1, nodata=nodata)
 
 
 def command_line_interface():
@@ -159,7 +159,7 @@ def command_line_interface():
     parser.add_argument("-nd", "--nodata",
                         help="No data value.", required=False, type=int, default=255)
     parser.add_argument("-stf", "--stratify",
-                        help="Stratified.", required=False, type=bolean, default=True)
+                        help="Stratified.", required=False, type=bool, default=True)
 
     # collect inputs
     args = parser.parse_args()
@@ -176,7 +176,7 @@ def command_line_interface():
     else:
         num_samples = [n]
 
-    path_wrapper(num_samples, data_path, ref_path, out_path, nodata=nodata)
+    main_sampling(num_samples, data_path, ref_path, out_path, nodata=nodata)
 
 
 if __name__ == '__main__':
