@@ -2,5 +2,5 @@
 Contributors
 ============
 
-* florian.roth <florian.roth@tuwien.ac.at>
-* marx.tupas <mark.tupas@geo.tuwien.ac.at>
+* Mark Edwin Tupas (marxt) <mark.tupas@geo.tuwien.ac.at>
+* Florian Roth (fl0roth) <florian.roth@tuwien.ac.at>
