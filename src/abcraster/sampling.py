@@ -18,60 +18,104 @@ import os, argparse
 from veranda.io.geotiff import GeoTiffFile
 import numpy as np
 
+
 def gen_random_sample(num_samples, data, ref, nodata=255):
     """
-        Creates a numpy array mask of randomly selected samples given a reference and input classified data.
+    Creates a numpy array mask of randomly selected samples given a reference and input classified data.
 
-        Parameters
-        ----------
-        num_samples: list - int
-            number of samples where iterable index matches class encoding,
-            for non-stratified sampling pass a singleton
-        data: numpy.array
-            (binary) classified data, assumes uint encoded
-        ref: numpy.array
-            reference data, assumes same data format and projection as data
-        nodata: int, optional
-            nodata value, assumes the same for both reference and input data
+    Parameters
+    ----------
+    num_samples: list, tuple or int
+        number of samples where iterable index matches class encoding,
+        for non-stratified sampling pass a singleton
+    data: numpy.array
+        (binary) classified data, assumes uint encoded
+    ref: numpy.array
+        reference data, assumes same data format and projection as data
+    nodata: int, optional
+        nodata value, assumes the same for both reference and input data
 
-        Returns
-        -------
-        samples: numpy.array - uint8
-            encoding: non-strtified 1 - selected, 0 - not selected; stratified class value
+    Returns
+    -------
+    samples: numpy.array
+        Boolean array containing pixels which are considered as sample (=True) and those which are not considered
+        (=False).
     """
 
+    # preform checks
     assert(data.shape == ref.shape)
 
-    samples = np.ones_like(data, dtype=np.uint8) * nodata
-    x_size, y_size = data.shape
+    # initialize samples
+    samples = ~np.ones_like(data, dtype=bool)
+    nodata_mask = (ref == nodata) | (data == nodata)
 
-    num_class = len(num_samples)
+    if isinstance(num_samples, list) or isinstance(num_samples, tuple):  # stratified sampling
+        # define number of samples per class
+        num_class = np.max(ref[ref != nodata]) + 1
+        if len(num_samples) == 1:
+            num_samples = num_samples * num_class
+        elif len(num_samples) != num_class:
+            raise ValueError("Dimension of samples do not correspond to the number of classes.")
 
-    if num_class > 1:
-        for i in range(num_class):
-            cnt = 0
-            while cnt < num_samples[i]:
-                x = np.random.random_integers(0, x_size - 1)
-                y = np.random.random_integers(0, y_size - 1)
+        # select samples
+        for class_id in range(num_class):
+            class_sel = random_conditional_selection(arr=ref, num=num_samples[class_id], apriori_mask=nodata_mask,
+                                                     cond=class_id)
+            samples[class_sel] = True
 
-                if data[x, y] != nodata and ref[x, y] == i and samples[x, y] == nodata:
-                    samples[x, y] = i #set to ref sam
-                    cnt += 1
+    elif isinstance(num_samples, int):  # non-stratified sampling
+        sel = random_conditional_selection(arr=ref, num=num_samples, apriori_mask=nodata_mask)
+        samples[sel] = True
+
     else:
-        cnt = 0
-        while cnt < num_samples[0]:
-            x = np.random.random_integers(0, x_size - 1)
-            y = np.random.random_integers(0, y_size - 1)
-
-            if data[x, y] != nodata and ref[x, y] != nodata and samples[x, y] == nodata:
-                samples[x, y] = 1
-                cnt += 1
+        raise ValueError("Unknown type for the number of samples variable.")
 
     return samples
 
-def path_wrapper(num_samples, data_path, ref_path, out_path, nodata=255):
+
+def random_conditional_selection(arr, num, apriori_mask, cond=None):
     """
-    Wraps genrate samples as a function opening the input files
+    Selects indices randomly from an array, only considering a specific value within the array.
+
+    Parameters
+    ----------
+    arr: numpy.array
+        Array which includes integer values.
+    num: int
+        Number of indices which should be retrieved randomly.
+    apriori_mask: numpy.array
+        Boolean array showing the pixels which should be excluded a priori.
+    cond: int, optional
+        Specific integers to which the selection should be limited to or no limitation (=None).
+
+    Returns
+    -------
+    idx: numpy.array
+        Array containing selected indices.
+    """
+
+    # get indices
+    arr_flt = arr.flatten()
+    apriori_mask = apriori_mask.flatten()
+    idx_arr = np.arange(arr_flt.size)
+
+    # define masking
+    if cond is not None:
+        mask = (arr_flt != cond) | (apriori_mask)
+    else:
+        mask = apriori_mask
+
+    # random selection
+    idx_arr = idx_arr[~mask]
+    np.random.shuffle(idx_arr)
+    idx = idx_arr[:num]
+
+    return np.unravel_index(idx, arr.shape)
+
+
+def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255):
+    """
+    Runs the sampling step without the accuracy assessment.
     """
 
     with GeoTiffFile(data_path, auto_decode=False) as src:
@@ -89,8 +133,9 @@ def path_wrapper(num_samples, data_path, ref_path, out_path, nodata=255):
 
     samples = gen_random_sample(num_samples, data, ref, nodata=nodata)
 
-    with GeoTiffFile(out_path, mode='w', count=1, geotransform=gt, spatialref=sref) as src:
-        src.write(samples, band=1, nodata=nodata)
+    with GeoTiffFile(out_path, mode='w', count=1, geotransform=ref_gt, spatialref=ref_sref) as src:
+        src.write(samples.astype(np.uint8), band=1, nodata=nodata)
+
 
 def command_line_interface():
     """ Command line interface to perform sampling. """
@@ -114,7 +159,7 @@ def command_line_interface():
     parser.add_argument("-nd", "--nodata",
                         help="No data value.", required=False, type=int, default=255)
     parser.add_argument("-stf", "--stratify",
-                        help="Stratified.", required=False, type=bolean, default=True)
+                        help="Stratified.", required=False, type=bool, default=True)
 
     # collect inputs
     args = parser.parse_args()
@@ -131,7 +176,8 @@ def command_line_interface():
     else:
         num_samples = [n]
 
-    path_wrapper(num_samples, data_path, ref_path, out_path, nodata=nodata)
+    main_sampling(num_samples, data_path, ref_path, out_path, nodata=nodata)
+
 
 if __name__ == '__main__':
     command_line_interface()

@@ -25,9 +25,10 @@ from abcraster.input import rasterize
 from abcraster.sampling import gen_random_sample
 
 
-def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath = None, sampling=None, diff_ras_out_filename='val.tif',
-        v_reprojected_filename='reproj_tmp.shp', v_rasterized_filename='rasterized_ref.tif',
-        out_csv_filename='val.csv', ex_filepath=None, delete_tmp_files=False):
+def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath=None, sampling=None,
+        diff_ras_out_filename='val.tif', v_reprojected_filename='reproj_tmp.shp',
+        v_rasterized_filename='rasterized_ref.tif', out_csv_filename='val.csv', ex_filepath=None,
+        delete_tmp_files=False):
     """
     Runs the validation with vector data input (presence = 1, absence=0).
 
@@ -40,10 +41,11 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath = Non
     out_dirpath: str
         Path of the output directory.
     sample_filepath: str, optional
-        Path of sampling raster (default: None)
-    sampling: list int, optional
-        list of number samples, matching iterable index to class encoding
-        If None, this implies samples are loaded from sample_filepath (default: None)
+        Path of sampling raster or None if no sampling should be performed (default: None).
+    sampling: list, tuple or int, optional
+        stratified sampling = list/tuple of number samples, matching iterable index to class encoding
+        non-stratified sampling = integer number of class-independent samples
+        None = this implies samples are loaded from sample_filepath (default: None)
     diff_ras_out_filename: str, optional
         Output path of the difference layer file (default: 'val.tif').
     v_reprojected_filename: str, optional
@@ -99,24 +101,27 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath = Non
     else:
         raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
 
-    #sampling logic
-    if sample_filepath is None: #no sampling
+    # sampling logic
+    if sample_filepath is None:
+        # no sampling
         samples = None
     else:
         if sampling is None:
-            #assumes there is a sampling raster existing, then reads it
             with GeoTiffFile(sample_filepath, auto_decode=False) as src:
+                # assumes there is a sampling raster existing, then reads it
                 samples = src.read(return_tags=False)
+            samples = samples != 255
         else:
-            #performs sampling
-            samples = gen_random_sample(sampling, input_datadata, ref_data, nodata=255)
+            # performs sampling
+            samples = gen_random_sample(sampling, input_data, ref_data, nodata=255)
+            sample_output = np.where(samples, ref_data, 255)
+            sample_output = sample_output.astype(np.uint8)
             with GeoTiffFile(sample_filepath, mode='w', count=1, geotransform=gt, spatialref=sref) as src:
-                src.write(samples, band=1, nodata=255)
+                src.write(sample_output, band=1, nodata=[255])
 
     print('Start validation')
     res, idx, UA, PA, Ce, Oe, CSI, F1, SR, K, A = accuracy_assessment(input_data, ref_data, mask=ex_data,
-                                                                      samples=samples, samples_nodata=255,
-                                                                      data_nodata=255, ref_nodata=255)
+                                                                      samples=samples, data_nodata=255, ref_nodata=255)
 
     # write difference map
     res = res.astype(np.uint8)
@@ -145,7 +150,7 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath = Non
     return val_measures
 
 
-def accuracy_assessment(data, ref_data, mask=None, samples=None, data_nodata=255, ref_nodata=255, samples_nodata=255):
+def accuracy_assessment(data, ref_data, mask=None, samples=None, data_nodata=255, ref_nodata=255):
     """
     Runs validation on aligned numpy arrays.
 
@@ -155,16 +160,14 @@ def accuracy_assessment(data, ref_data, mask=None, samples=None, data_nodata=255
         Binary classification result which will be validated.
     ref_data: numpy.array
         Binary reference data array.
-    mask: numpy.array
-        Binary mask to be applied on both input arrays.
-    samples: numpy.array
-        sampling mask
+    mask: numpy.array, optional
+        Binary mask to be applied on both input arrays (default: None).
+    samples: numpy.array, optional
+        Boolean array showing the pixels which should be considered for accuracy assessment (default: None).
     data_nodata: int, optional
         No data value of the classification result (default: 255).
     ref_nodata: int, optional
         No data value of the reference data (default: 255).
-    samples_nodata: int, optional
-        No data value of the sampling raster (default: 255).
 
     Returns
     -------
@@ -204,7 +207,7 @@ def accuracy_assessment(data, ref_data, mask=None, samples=None, data_nodata=255
     ras_result = res
 
     if samples is not None:
-        res = res[samples != samples_nodata]
+        res[~samples] = 255
 
     TP = np.sum(res == 2)
     TN = np.sum(res == 1)
