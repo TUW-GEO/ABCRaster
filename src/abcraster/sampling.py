@@ -19,7 +19,7 @@ from veranda.io.geotiff import GeoTiffFile
 import numpy as np
 
 
-def gen_random_sample(num_samples, data, ref, nodata=255):
+def gen_random_sample(num_samples, data, ref, nodata=255, exclusion=None):
     """
     Creates a numpy array mask of randomly selected samples given a reference and input classified data.
 
@@ -34,6 +34,8 @@ def gen_random_sample(num_samples, data, ref, nodata=255):
         reference data, assumes same data format and projection as data
     nodata: int, optional
         nodata value, assumes the same for both reference and input data
+    exclusion: numpy.array
+        exclusion mask, True to be removed in analysis
 
     Returns
     -------
@@ -42,18 +44,25 @@ def gen_random_sample(num_samples, data, ref, nodata=255):
         (=False).
     """
 
-    # preform checks
-    assert(data.shape == ref.shape)
+    # perform checks
+    if data.shape != ref.shape:
+        raise RuntimeError("Dimension of input and reference rasters are not the same.")
 
     # initialize samples
-    samples = ~np.ones_like(data, dtype=bool)
+    samples = ~np.ones_like(data, dtype=np.uint8)
     nodata_mask = (ref == nodata) | (data == nodata)
+
+    if exclusion is not None:
+        nodata_mask = nodata_mask | exclusion
 
     if isinstance(num_samples, list) or isinstance(num_samples, tuple):  # stratified sampling
         # define number of samples per class
         num_class = np.max(ref[ref != nodata]) + 1
         if len(num_samples) == 1:
+            if num_samples % num_class != 0:
+                raise ValueError("If num_samples list/tuple is a singleton, it should be divisible by num_class.")
             num_samples = num_samples * num_class
+            num_samples = [sample/num_class for sample in num_samples] #samples evenly distributed per class
         elif len(num_samples) != num_class:
             raise ValueError("Dimension of samples do not correspond to the number of classes.")
 
@@ -61,11 +70,11 @@ def gen_random_sample(num_samples, data, ref, nodata=255):
         for class_id in range(num_class):
             class_sel = random_conditional_selection(arr=ref, num=num_samples[class_id], apriori_mask=nodata_mask,
                                                      cond=class_id)
-            samples[class_sel] = True
+            samples[class_sel] = class_id
 
     elif isinstance(num_samples, int):  # non-stratified sampling
         sel = random_conditional_selection(arr=ref, num=num_samples, apriori_mask=nodata_mask)
-        samples[sel] = True
+        samples[sel] = 1
 
     else:
         raise ValueError("Unknown type for the number of samples variable.")
@@ -113,7 +122,7 @@ def random_conditional_selection(arr, num, apriori_mask, cond=None):
     return np.unravel_index(idx, arr.shape)
 
 
-def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255):
+def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255, ex_path=None):
     """
     Runs the sampling step without the accuracy assessment.
     """
@@ -128,10 +137,22 @@ def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255):
         ref_gt = src.geotransform
         ref_sref = src.spatialref
 
-    assert(ref_gt == data_gt)
-    assert(ref_sref == data_sref)
+    if ref_gt != data_gt | ref_sref == data_sref:
+        raise RuntimeError("Grid/projection of input and reference data are not the same!")
 
-    samples = gen_random_sample(num_samples, data, ref, nodata=nodata)
+    if ex_path is not None:
+        with GeoTiffFile(ex_path, auto_decode=False) as src:
+            ex = src.read(return_tags=False)
+            ex_gt = src.geotransform
+            ex_sref = src.spatialref
+            ex = ex.astype(bool) #force boolean type
+
+        if ex_gt != data_gt | ex_sref == data_sref:
+            raise RuntimeError("Grid/projection of input and exclusion data are not the same!")
+    else:
+        ex = None
+
+    samples = gen_random_sample(num_samples, data, ref, nodata=nodata, exclusion=ex)
 
     with GeoTiffFile(out_path, mode='w', count=1, geotransform=ref_gt, spatialref=ref_sref) as src:
         src.write(samples.astype(np.uint8), band=1, nodata=nodata)
@@ -148,7 +169,7 @@ def command_line_interface():
                         required=True, type=str)
     parser.add_argument("-ex", "--exclusion_filepath",
                         help="Full file path to the binary exclusion data 1= exclude, for now 255=nodata.",
-                        required=False, type=str)
+                        required=False, type=str, default='None')
     parser.add_argument("-ref", "--reference_file",
                         help="Full file path to the reference raster dataset (.tif or .shp, in any projection)",
                         required=True, type=str)
@@ -165,6 +186,8 @@ def command_line_interface():
     args = parser.parse_args()
     data_path = args.input_filepath
     exclusion_filepath = args.exclusion_filepath
+    if exclusion_filepath == 'None':
+        exclusion_filepath = None
     ref_path = args.reference_file
     out_path = args.output_raster
     n = args.num_samples
@@ -176,7 +199,7 @@ def command_line_interface():
     else:
         num_samples = [n]
 
-    main_sampling(num_samples, data_path, ref_path, out_path, nodata=nodata)
+    main_sampling(num_samples, data_path, ref_path, out_path, nodata=nodata, ex_path=exclusion_filepath)
 
 
 if __name__ == '__main__':
