@@ -120,8 +120,9 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath=None,
                 src.write(sample_output, band=1, nodata=[255])
 
     print('Start validation')
-    res, idx, UA, PA, Ce, Oe, CSI, F1, SR, K, A = accuracy_assessment(input_data, ref_data, mask=ex_data,
-                                                                      samples=samples, data_nodata=255, ref_nodata=255)
+    res, idx, UA, PA, Ce, Oe, CSI, F1, SR, K, A, b, Pre = accuracy_assessment(input_data, ref_data, mask=ex_data,
+                                                                              samples=samples, data_nodata=255,
+                                                                              ref_nodata=255)
 
     # write difference map
     res = res.astype(np.uint8)
@@ -134,17 +135,17 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath=None,
     input_base_filename = os.path.basename(ref_data_filepath)
     if out_csv_filename is not None:
         out_csv_path = os.path.join(out_dirpath, out_csv_filename)
-        dat = [[input_base_filename, UA, PA, Ce, Oe, CSI, F1, SR, K, A]]
+        dat = [[input_base_filename, UA, PA, Ce, Oe, CSI, F1, SR, K, A, b, Pre]]
         df = pd.DataFrame(dat,
                           columns=['file', "User's Accuracy/Precision", "Producer's Accuracy/Recall",
                                    'Commission Error', 'Omission Error', 'Critical Success Index', 'F1', 'Success Rate',
-                                   'Kappa', 'Accuracy'])
+                                   'Kappa', 'Accuracy', 'Bias', 'Prevalence'])
         df.to_csv(out_csv_path)
 
     # return validation measures as dictionary
     val_measures = {'file': input_base_filename, "User's Accuracy/Precision": UA, "Producer's Accuracy/Recall": PA,
                     'Commission Error': Ce, 'Omission Error': Oe, 'Critical Success Index': CSI, 'F1': F1,
-                    'Success Rate': SR, 'Kappa': K, 'Accuracy': A}
+                    'Success Rate': SR, 'Kappa': K, 'Accuracy': A, 'Bias': b, 'Prevalence': Pre}
 
     print('End validation')
     return val_measures
@@ -227,6 +228,8 @@ def accuracy_assessment(data, ref_data, mask=None, samples=None, data_nodata=255
     Oe = FN / (FN + TP)  # inverse of recall
     P = math.exp(FP / ((TP + FN) / math.log(0.5)))  # penalization as defined in ACube4Floods 5.1
     SR = PA - (1 - P)  # Success rate as defined in ACube4Floods 5.1
+    b = (TP + FP) / (TP + FN)  # bias as shown in the GFM proposal
+    Pre = (TP + FN) / (TP + FN + TN + FP)  # prevalence as defined by Dasgupta (in preparation)
 
     print("User's Accuracy/Precision: %f" % UA)
     print("Producer's Accuracy/Recall/PP2: %f" % PA)
@@ -238,8 +241,10 @@ def accuracy_assessment(data, ref_data, mask=None, samples=None, data_nodata=255
     print("kappa: %f" % K)
     print("Penalization Function: %f" % P)
     print("Success Rate: %f" % SR)
+    print("Bias: %f" % b)
+    print("Prevalence: %f" % Pre)
 
-    return ras_result, valid, UA, PA, Ce, Oe, CSI, F1, SR, K, A
+    return ras_result, valid, UA, PA, Ce, Oe, CSI, F1, SR, K, A, b, Pre
 
 
 def delete_shapefile(shp_path):
