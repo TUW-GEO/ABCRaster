@@ -40,8 +40,7 @@ def gen_random_sample(num_samples, data, ref, nodata=255, exclusion=None):
     Returns
     -------
     samples: numpy.array
-        Boolean array containing pixels which are considered as sample (=True) and those which are not considered
-        (=False).
+        Integer array, which contains the class id for the sample points and no data for other pixels.
     """
 
     # perform checks
@@ -49,11 +48,11 @@ def gen_random_sample(num_samples, data, ref, nodata=255, exclusion=None):
         raise RuntimeError("Dimension of input and reference rasters are not the same.")
 
     # initialize samples
-    samples = ~np.ones_like(data, dtype=np.uint8)
+    samples = ~np.ones_like(data, dtype=bool)
     nodata_mask = (ref == nodata) | (data == nodata)
 
     if exclusion is not None:
-        nodata_mask = nodata_mask | exclusion
+        nodata_mask = nodata_mask | (exclusion == 1)
 
     if isinstance(num_samples, list) or isinstance(num_samples, tuple):  # stratified sampling
         # define number of samples per class
@@ -62,7 +61,7 @@ def gen_random_sample(num_samples, data, ref, nodata=255, exclusion=None):
             if num_samples % num_class != 0:
                 raise ValueError("If num_samples list/tuple is a singleton, it should be divisible by num_class.")
             num_samples = num_samples * num_class
-            num_samples = [sample/num_class for sample in num_samples] #samples evenly distributed per class
+            num_samples = [int(sample/num_class) for sample in num_samples] #samples evenly distributed per class
         elif len(num_samples) != num_class:
             raise ValueError("Dimension of samples do not correspond to the number of classes.")
 
@@ -70,14 +69,18 @@ def gen_random_sample(num_samples, data, ref, nodata=255, exclusion=None):
         for class_id in range(num_class):
             class_sel = random_conditional_selection(arr=ref, num=num_samples[class_id], apriori_mask=nodata_mask,
                                                      cond=class_id)
-            samples[class_sel] = class_id
+            samples[class_sel] = True
 
     elif isinstance(num_samples, int):  # non-stratified sampling
         sel = random_conditional_selection(arr=ref, num=num_samples, apriori_mask=nodata_mask)
-        samples[sel] = 1
+        samples[sel] = True
 
     else:
         raise ValueError("Unknown type for the number of samples variable.")
+
+    # apply class allocation
+    samples = np.where(samples, ref, 255)
+    samples = samples.astype(np.uint8)
 
     return samples
 

@@ -110,14 +110,11 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath=None,
             with GeoTiffFile(sample_filepath, auto_decode=False) as src:
                 # assumes there is a sampling raster existing, then reads it
                 samples = src.read(return_tags=False)
-            samples = samples != 255
         else:
             # performs sampling
-            samples = gen_random_sample(sampling, input_data, ref_data, nodata=255)
-            sample_output = np.where(samples, ref_data, 255)
-            sample_output = sample_output.astype(np.uint8)
+            samples = gen_random_sample(sampling, input_data, ref_data, exclusion=ex_data, nodata=255)
             with GeoTiffFile(sample_filepath, mode='w', count=1, geotransform=gt, spatialref=sref) as src:
-                src.write(sample_output, band=1, nodata=[255])
+                src.write(samples, band=1, nodata=[255])
 
     print('Start validation')
     res, idx, UA, PA, Ce, Oe, CSI, F1, SR, K, A, b, Pre = accuracy_assessment(input_data, ref_data, mask=ex_data,
@@ -164,7 +161,7 @@ def accuracy_assessment(data, ref_data, mask=None, samples=None, data_nodata=255
     mask: numpy.array, optional
         Binary mask to be applied on both input arrays (default: None).
     samples: numpy.array, optional
-        Boolean array showing the pixels which should be considered for accuracy assessment (default: None).
+        Samples as integer array, where all valid pixels are considered as sample points (default: None).
     data_nodata: int, optional
         No data value of the classification result (default: 255).
     ref_nodata: int, optional
@@ -208,7 +205,7 @@ def accuracy_assessment(data, ref_data, mask=None, samples=None, data_nodata=255
     ras_result = res
 
     if samples is not None:
-        res[~samples] = 255
+        res[samples == 255] = 255
 
     TP = np.sum(res == 2)
     TN = np.sum(res == 1)
