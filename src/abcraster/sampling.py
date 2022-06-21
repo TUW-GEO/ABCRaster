@@ -169,7 +169,7 @@ def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255, ex_pat
         ref_gt = src.geotransform
         ref_sref = src.spatialref
 
-    if ref_gt != data_gt | ref_sref == data_sref:
+    if ref_gt != data_gt | ref_sref != data_sref:
         raise RuntimeError("Grid/projection of input and reference data are not the same!")
 
     if ex_path is not None:
@@ -179,7 +179,7 @@ def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255, ex_pat
             ex_sref = src.spatialref
             ex = ex.astype(bool) #force boolean type
 
-        if ex_gt != data_gt | ex_sref == data_sref:
+        if ex_gt != data_gt | ex_sref != data_sref:
             raise RuntimeError("Grid/projection of input and exclusion data are not the same!")
     else:
         ex = None

@@ -45,7 +45,8 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath=None,
     sampling: list, tuple or int, optional
         stratified sampling = list/tuple of number samples, matching iterable index to class encoding
         non-stratified sampling = integer number of class-independent samples
-        None = this implies samples are loaded from sample_filepath (default: None)
+        None = this implies samples are loaded from sample_filepath (default: None),
+        *sampling is superseded if sample_filepath is None
     diff_ras_out_filename: str, optional
         Output path of the difference layer file (default: 'val.tif').
     v_reprojected_filename: str, optional
@@ -77,6 +78,11 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath=None,
         print('Load exclusion layer.')
         with GeoTiffFile(ex_filepath, auto_decode=False) as src:
             ex_data = src.read(return_tags=False)
+            ex_gt = src.geotransform
+            ex_sref = src.spatialref
+
+            if ex_gt != gt | ex_sref != sref:
+                raise RuntimeError("Grid/projection of input and reference data are not the same!")
 
     # handle reference data input
     ref_file_ext = os.path.splitext(os.path.basename(ref_data_filepath))[1]
@@ -97,7 +103,12 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath=None,
     elif ref_file_ext == '.tif':
         print('Load raster reference data.')
         with GeoTiffFile(ref_data_filepath, auto_decode=False) as src:
-            ref_data = src.read(return_tags=False)  # TODO: add projecttion check and reprojection procedure
+            ref_data = src.read(return_tags=False)
+            ref_gt = src.geotransform
+            ref_sref = src.spatialref
+
+            if ref_gt != gt | ref_sref != sref:
+                raise RuntimeError("Grid/projection of input and reference data are not the same!")
     else:
         raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
 

@@ -2,6 +2,7 @@
 ABCRaster stands for Accuracy assessment of Binary Classified Raster. It is a package for performing validation, accuracy assessment, or comparing flood map (*.tiff) results versus a reference (*.shp) e.g. [CEMS](https://emergency.copernicus.eu/emsdata.html). Can be used to assess other binary classification (presence/absence) maps. Computes accuracy assessment metrics e.g. User, Producer’s accuracy, Kappa, etc. Also creates ‘confusion map’ with pixels marked as TP, TN, FP, and FN.
 
 * reference shapefile can be in any projection (built-in reprojection and rasterization)
+* random (stratified) sampling support (*based on reference file)
 * creates CSV output
 * creates confusion (difference) tiff file 
 
@@ -57,6 +58,11 @@ Bias is computed by:
 Prevalence is computed by:
 
 ![Pre=(TP+FN)/(TP+FN+TN+FP)](https://latex.codecogs.com/svg.latex?Pre=(TP+FN)/(TP+FN+TN+FP))
+
+## Sampling
+Module added for random and stratified sampling methods. Sampling module includes stand-alone CLI for creating raster 
+encoded samples. Optional to enable sampling in Accuracy assessment workflow either by providing a preselected samples 
+raster or number of samples e.g. int  for class independent sampling or iterable for (reference) class defined values.
 
 ## Installation
 First, a conda environment containing GDAL needs to be created:
