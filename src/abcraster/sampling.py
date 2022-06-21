@@ -14,7 +14,7 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import os, argparse
+import argparse
 from veranda.io.geotiff import GeoTiffFile
 import numpy as np
 
@@ -26,16 +26,19 @@ def gen_random_sample(num_samples, data, ref, nodata=255, exclusion=None):
     Parameters
     ----------
     num_samples: list, tuple or int
-        number of samples where iterable index matches class encoding,
-        for non-stratified sampling pass a singleton
+        - number of samples where the index of the iterable matches class encoding e.g. [M, N] --> M samples for class 0
+        and N samples for class 1,
+        - value in singletons i.e. [N] are treated as the total number of samples for all classes and would be equally
+        distributed hence should be divisible by the number of classes. num classes detected from reference data values.
+        - for non-stratified sampling pass an int.
     data: numpy.array
-        (binary) classified data, assumes uint encoded
+        (binary) classified data, assumes uint encoded.
     ref: numpy.array
-        reference data, assumes same data format and projection as data
+        reference data, assumes same data format and projection as (input) data
     nodata: int, optional
         nodata value, assumes the same for both reference and input data
     exclusion: numpy.array
-        exclusion mask, True to be removed in analysis
+        exclusion mask, encoded as 1 or True to be removed from analysis
 
     Returns
     -------
@@ -43,7 +46,7 @@ def gen_random_sample(num_samples, data, ref, nodata=255, exclusion=None):
         Integer array, which contains the class id for the sample points and no data for other pixels.
     """
 
-    # perform checks
+    # performing raster shape check
     if data.shape != ref.shape:
         raise RuntimeError("Dimension of input and reference rasters are not the same.")
 
@@ -51,10 +54,12 @@ def gen_random_sample(num_samples, data, ref, nodata=255, exclusion=None):
     samples = ~np.ones_like(data, dtype=bool)
     nodata_mask = (ref == nodata) | (data == nodata)
 
+    # check for exclusion data, then added to nodata mask if exists
     if exclusion is not None:
         nodata_mask = nodata_mask | (exclusion == 1)
 
-    if isinstance(num_samples, list) or isinstance(num_samples, tuple):  # stratified sampling
+    # stratified sampling
+    if isinstance(num_samples, list) or isinstance(num_samples, tuple):
         # define number of samples per class
         num_class = np.max(ref[ref != nodata]) + 1
         if len(num_samples) == 1:
@@ -71,7 +76,8 @@ def gen_random_sample(num_samples, data, ref, nodata=255, exclusion=None):
                                                      cond=class_id)
             samples[class_sel] = True
 
-    elif isinstance(num_samples, int):  # non-stratified sampling
+    # non-stratified sampling
+    elif isinstance(num_samples, int):
         sel = random_conditional_selection(arr=ref, num=num_samples, apriori_mask=nodata_mask)
         samples[sel] = True
 
@@ -127,7 +133,30 @@ def random_conditional_selection(arr, num, apriori_mask, cond=None):
 
 def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255, ex_path=None):
     """
-    Runs the sampling step without the accuracy assessment.
+    Runs the sampling step without the accuracy assessment. Writes the sampling raster to file.
+
+    Parameters
+    ----------
+    num_samples: list, tuple or int
+        - number of samples where the index of the iterable matches class encoding e.g. [M, N] --> M samples for class 0
+        and N samples for class 1,
+        - value in singletons i.e. [N] are treated as the total number of samples for all classes and would be equally
+        distributed hence should be divisible by the number of classes. num classes detected from reference data values.
+        - for non-stratified sampling pass an int.
+    data_path: str
+        file path to classified raster data (*.tif), uint encoded
+    ref_path: str
+        file path to reference raster data (*.tif), unit encoded
+    out_path: str
+        file path to output sampling raster data (*.tif), unit encoded
+    nodata: int (default == 255)
+        no data value.
+    ex_path: str (default == None)
+        file path to exclusion raster data (*.tif), assumed to be encoded with 1 or True values as pixels to be excluded
+
+    Returns
+    -------
+    None
     """
 
     with GeoTiffFile(data_path, auto_decode=False) as src:
@@ -198,9 +227,9 @@ def command_line_interface():
     strat = args.stratify
 
     if strat:
-        num_samples = [n/2, n/2]
+        num_samples = [int(n/2), int(n/2)] #use case is binary classified data
     else:
-        num_samples = [n]
+        num_samples = n
 
     main_sampling(num_samples, data_path, ref_path, out_path, nodata=nodata, ex_path=exclusion_filepath)
 
