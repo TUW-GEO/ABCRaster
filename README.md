@@ -50,6 +50,14 @@ Success Rate (SR) is computed by:
 
 ![SR=PA-(1-P)](https://latex.codecogs.com/svg.latex?SR=PA-(1-P)) 
 
+Bias is computed by:
+
+![b=(TP+FP)/(TP+FN)](https://latex.codecogs.com/svg.latex?b=(TP+FP)/(TP+FN))
+ 
+Prevalence is computed by:
+
+![Pre=(TP+FN)/(TP+FN+TN+FP)](https://latex.codecogs.com/svg.latex?Pre=(TP+FN)/(TP+FN+TN+FP))
+
 ## Installation
 First, a conda environment containing GDAL needs to be created:
 
