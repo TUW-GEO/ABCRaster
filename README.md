@@ -85,7 +85,14 @@ In order to finish the setup of the GDAL environment, the following environment 
     export GDAL_DATA="[...]/miniconda/envs/abcraster/share/gdal"
 
 ** to get the path your conda envirment you can use `echo $CONDA_PREFIX` on Linux or  `echo %CONDA_PREFIX%` on Windows
+
 ## Usage
+
+### Scripting
+The functionality of ABCRaster can be accessed through the `run` function inside of the `accuracy_assessment`
+module.
+
+### Command line
 
 `python -m abcraster.cli`
 

@@ -201,7 +201,11 @@ def accuracy_assessment(data, ref_data, mask=None, samples=None, data_nodata=255
     K: float
         Kappa coefficient
     A: float
-        Accuracy
+        (Overall) Accuracy
+    b: float
+        Bias
+    Pre: float
+        Prevalence
     """
 
     res = 1 + (2 * data) - ref_data
