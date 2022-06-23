@@ -1,5 +1,5 @@
 # ABCRaster
-ABCRaster stands for Accuracy assessment of Binary Classified Raster. It is a package for performing validation, accuracy assessment, or comparing flood map (*.tiff) results versus a reference (*.shp) e.g. [CEMS](https://emergency.copernicus.eu/emsdata.html). Can be used to assess other binary classification (presence/absence) maps. Computes accuracy assessment metrics e.g. User, Producer’s accuracy, Kappa, etc. Also creates ‘confusion map’ with pixels marked as TP, TN, FP, and FN.
+ABCRaster stands for Accuracy assessment of Binary Classified Raster. It is a package for performing validation, accuracy assessment, or comparing flood map (*.tiff) results versus a reference (*.shp, *.tif) e.g. [CEMS](https://emergency.copernicus.eu/emsdata.html). Can be used to assess other binary classification (presence/absence) maps. Computes accuracy assessment metrics e.g. User, Producer’s accuracy, Kappa, etc. Also creates ‘confusion map’ with pixels marked as TP, TN, FP, and FN.
 
 * reference shapefile can be in any projection (built-in reprojection and rasterization)
 * random (stratified) sampling support (*based on reference file)
@@ -73,7 +73,6 @@ First, a conda environment containing GDAL needs to be created:
 Aside from ogr/gdal the package requires the following dependencies:
 * Pandas
 * [Veranda](https://github.com/TUW-GEO/veranda) v0.1.0
-* [Equi7Grid](https://github.com/TUW-GEO/Equi7Grid) (optional)
     
 The package itself can be installed by pip (from source or a repository):
     

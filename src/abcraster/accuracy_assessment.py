@@ -81,7 +81,7 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath=None,
             ex_gt = src.geotransform
             ex_sref = src.spatialref
 
-            if ex_gt != gt | ex_sref != sref:
+            if ex_gt != gt or ex_sref != sref:
                 raise RuntimeError("Grid/projection of input and reference data are not the same!")
 
     # handle reference data input
@@ -107,7 +107,7 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath=None,
             ref_gt = src.geotransform
             ref_sref = src.spatialref
 
-            if ref_gt != gt | ref_sref != sref:
+            if ref_gt != gt or ref_sref != sref:
                 raise RuntimeError("Grid/projection of input and reference data are not the same!")
     else:
         raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
