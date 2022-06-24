@@ -29,12 +29,20 @@ def command_line_interface():
     parser.add_argument("-in", "--input_filepath",
                         help="Full file path to the binary raster data 1= presence, 0=absence, for now 255=nodata.",
                         required=True, type=str)
+    parser.add_argument("-ref", "--reference_filepath",
+                        help="Full file path to the validation dataset (.tif or .shp, in any projection)",
+                        required=True, type=str)
     parser.add_argument("-ex", "--exclusion_filepath",
                         help="Full file path to the binary exclusion data 1= exclude, for now 255=nodata.",
                         required=False, type=str)
-    parser.add_argument("-ref", "--reference_file",
-                        help="Full file path to the validation dataset (.tif or .shp, in any projection)",
-                        required=True, type=str)
+    parser.add_argument("-ns", "--num_samples",
+                        help="number of total samples if sampling will be applied.", required=False, type=int)
+    parser.add_argument("-stf", "--stratify",
+                        help="Stratification based on reference data", required=False, type=bool, default=True)
+    parser.add_argument("-sfp", "--samples_filepath",
+                        help="Full file path to the sampling raster dataset (.tif ), if num samples not specified, \
+                        assumes samples will be read from this path",
+                        required=False, type=str)
     parser.add_argument("-out", "--output_raster",
                         help="Full file path to the final difference raster", required=True, type=str)
     parser.add_argument("-csv", "--output_csv",
@@ -46,10 +54,24 @@ def command_line_interface():
     args = parser.parse_args()
     input_raster_filepath = args.input_filepath
     exclusion_filepath = args.exclusion_filepath
-    validation_filepath = args.reference_file
+    validation_filepath = args.reference_filepath
     output_raster_filepath = args.output_raster
     output_csv_filepath = args.output_csv
     delete_tmp = args.delete_tmp
+    strat = args.stratify
+    sampling = args.num_samples
+    samples_filepath = args.samples_filepath
+
+    if sampling is not None:
+        if strat:
+            sampling = [sampling]
+        else:
+            sampling = int(sampling)
+
+        if samples_filepath is None:
+            print("WARNING: Number of samples specified but no filepath to output samples raster specified! \
+            Ignoring number of samples. Proceeding without sampling.")  # warning or run time error?
+            sampling = None
 
     # define output names
     out_dirpath, out_raster_filename = os.path.split(output_raster_filepath)
@@ -64,7 +86,8 @@ def command_line_interface():
     run(ras_data_filepath=input_raster_filepath, ref_data_filepath=validation_filepath, out_dirpath=out_dirpath,
         diff_ras_out_filename=out_raster_filename, v_reprojected_filename=reproj_shp_filepath,
         v_rasterized_filename=rasterized_shp_filepath, out_csv_filename=output_csv_filepath,
-        ex_filepath=exclusion_filepath, delete_tmp_files=delete_tmp)
+        ex_filepath=exclusion_filepath, delete_tmp_files=delete_tmp,
+        sampling=sampling, samples_filepath=samples_filepath)
 
 
 if __name__ == '__main__':

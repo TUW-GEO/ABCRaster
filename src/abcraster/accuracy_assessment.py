@@ -22,11 +22,13 @@ import numpy as np
 import pandas as pd
 from veranda.io.geotiff import GeoTiffFile
 from abcraster.input import rasterize
+from abcraster.sampling import gen_random_sample
 
 
-def run(ras_data_filepath, ref_data_filepath, out_dirpath, diff_ras_out_filename='val.tif',
-        v_reprojected_filename='reproj_tmp.shp', v_rasterized_filename='rasterized_ref.tif',
-        out_csv_filename='val.csv', ex_filepath=None, delete_tmp_files=False):
+def run(ras_data_filepath, ref_data_filepath, out_dirpath, samples_filepath=None, sampling=None,
+        diff_ras_out_filename='val.tif', v_reprojected_filename='reproj_tmp.shp',
+        v_rasterized_filename='rasterized_ref.tif', out_csv_filename='val.csv', ex_filepath=None,
+        delete_tmp_files=False):
     """
     Runs the validation with vector data input (presence = 1, absence=0).
 
@@ -38,6 +40,13 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, diff_ras_out_filename
         Path of reference data.
     out_dirpath: str
         Path of the output directory.
+    samples_filepath: str, optional
+        Path of sampling raster or None if no sampling should be performed (default: None).
+    sampling: list, tuple or int, optional
+        stratified sampling = list/tuple of number samples, matching iterable index to class encoding
+        non-stratified sampling = integer number of class-independent samples
+        None = this implies samples are loaded from samples_filepath (default: None),
+        *sampling is superseded if samples_filepath is None
     diff_ras_out_filename: str, optional
         Output path of the difference layer file (default: 'val.tif').
     v_reprojected_filename: str, optional
@@ -69,6 +78,11 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, diff_ras_out_filename
         print('Load exclusion layer.')
         with GeoTiffFile(ex_filepath, auto_decode=False) as src:
             ex_data = src.read(return_tags=False)
+            ex_gt = src.geotransform
+            ex_sref = src.spatialref
+
+            if ex_gt != gt or ex_sref != sref:
+                raise RuntimeError("Grid/projection of input and reference data are not the same!")
 
     # handle reference data input
     ref_file_ext = os.path.splitext(os.path.basename(ref_data_filepath))[1]
@@ -89,13 +103,34 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, diff_ras_out_filename
     elif ref_file_ext == '.tif':
         print('Load raster reference data.')
         with GeoTiffFile(ref_data_filepath, auto_decode=False) as src:
-            ref_data = src.read(return_tags=False)  # TODO: add projecttion check and reprojection procedure
+            ref_data = src.read(return_tags=False)
+            ref_gt = src.geotransform
+            ref_sref = src.spatialref
+
+            if ref_gt != gt or ref_sref != sref:
+                raise RuntimeError("Grid/projection of input and reference data are not the same!")
     else:
         raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
 
+    # sampling logic
+    if samples_filepath is None:
+        # no sampling
+        samples = None
+    else:
+        if sampling is None:
+            with GeoTiffFile(samples_filepath, auto_decode=False) as src:
+                # assumes there is a sampling raster existing, then reads it
+                samples = src.read(return_tags=False)
+        else:
+            # performs sampling
+            samples = gen_random_sample(sampling, input_data, ref_data, exclusion=ex_data, nodata=255)
+            with GeoTiffFile(samples_filepath, mode='w', count=1, geotransform=gt, spatialref=sref) as src:
+                src.write(samples, band=1, nodata=[255])
+
     print('Start validation')
-    res, idx, UA, PA, Ce, Oe, CSI, F1, SR, K, A = accuracy_assessment(input_data, ref_data, mask=ex_data,
-                                                                      data_nodata=255, ref_nodata=255)
+    res, idx, UA, PA, Ce, Oe, CSI, F1, SR, K, A, b, Pre = accuracy_assessment(input_data, ref_data, mask=ex_data,
+                                                                              samples=samples, data_nodata=255,
+                                                                              ref_nodata=255)
 
     # write difference map
     res = res.astype(np.uint8)
@@ -108,23 +143,23 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, diff_ras_out_filename
     input_base_filename = os.path.basename(ref_data_filepath)
     if out_csv_filename is not None:
         out_csv_path = os.path.join(out_dirpath, out_csv_filename)
-        dat = [[input_base_filename, UA, PA, Ce, Oe, CSI, F1, SR, K, A]]
+        dat = [[input_base_filename, UA, PA, Ce, Oe, CSI, F1, SR, K, A, b, Pre]]
         df = pd.DataFrame(dat,
                           columns=['file', "User's Accuracy/Precision", "Producer's Accuracy/Recall",
                                    'Commission Error', 'Omission Error', 'Critical Success Index', 'F1', 'Success Rate',
-                                   'Kappa', 'Accuracy'])
+                                   'Kappa', 'Accuracy', 'Bias', 'Prevalence'])
         df.to_csv(out_csv_path)
 
     # return validation measures as dictionary
     val_measures = {'file': input_base_filename, "User's Accuracy/Precision": UA, "Producer's Accuracy/Recall": PA,
                     'Commission Error': Ce, 'Omission Error': Oe, 'Critical Success Index': CSI, 'F1': F1,
-                    'Success Rate': SR, 'Kappa': K, 'Accuracy': A}
+                    'Success Rate': SR, 'Kappa': K, 'Accuracy': A, 'Bias': b, 'Prevalence': Pre}
 
     print('End validation')
     return val_measures
 
 
-def accuracy_assessment(data, ref_data, mask=None, data_nodata=255, ref_nodata=255):
+def accuracy_assessment(data, ref_data, mask=None, samples=None, data_nodata=255, ref_nodata=255):
     """
     Runs validation on aligned numpy arrays.
 
@@ -134,8 +169,10 @@ def accuracy_assessment(data, ref_data, mask=None, data_nodata=255, ref_nodata=2
         Binary classification result which will be validated.
     ref_data: numpy.array
         Binary reference data array.
-    mask: numpy.array
-        Binary mask to be applied on both input arrays.
+    mask: numpy.array, optional
+        Binary mask to be applied on both input arrays (default: None).
+    samples: numpy.array, optional
+        Samples as integer array, where all valid pixels are considered as sample points (default: None).
     data_nodata: int, optional
         No data value of the classification result (default: 255).
     ref_nodata: int, optional
@@ -164,7 +201,11 @@ def accuracy_assessment(data, ref_data, mask=None, data_nodata=255, ref_nodata=2
     K: float
         Kappa coefficient
     A: float
-        Accuracy
+        (Overall) Accuracy
+    b: float
+        Bias
+    Pre: float
+        Prevalence
     """
 
     res = 1 + (2 * data) - ref_data
@@ -174,7 +215,12 @@ def accuracy_assessment(data, ref_data, mask=None, data_nodata=255, ref_nodata=2
     if mask is not None:
         res[mask == 1] = 255
         data[mask == 1] = 255  # applying exclusion, setting exclusion pixels as no data
-    valid = np.logical_and(ref_data != 255, data != 255)  # index removing no data from comparison
+    valid = np.logical_and(ref_data != 255, data != 255)  # index removing no data from comparison raster
+
+    ras_result = res
+
+    if samples is not None:
+        res[samples == 255] = 255
 
     TP = np.sum(res == 2)
     TN = np.sum(res == 1)
@@ -194,6 +240,8 @@ def accuracy_assessment(data, ref_data, mask=None, data_nodata=255, ref_nodata=2
     Oe = FN / (FN + TP)  # inverse of recall
     P = math.exp(FP / ((TP + FN) / math.log(0.5)))  # penalization as defined in ACube4Floods 5.1
     SR = PA - (1 - P)  # Success rate as defined in ACube4Floods 5.1
+    b = (TP + FP) / (TP + FN)  # bias as shown in the GFM proposal
+    Pre = (TP + FN) / (TP + FN + TN + FP)  # prevalence as defined by Dasgupta (in preparation)
 
     print("User's Accuracy/Precision: %f" % UA)
     print("Producer's Accuracy/Recall/PP2: %f" % PA)
@@ -205,8 +253,10 @@ def accuracy_assessment(data, ref_data, mask=None, data_nodata=255, ref_nodata=2
     print("kappa: %f" % K)
     print("Penalization Function: %f" % P)
     print("Success Rate: %f" % SR)
+    print("Bias: %f" % b)
+    print("Prevalence: %f" % Pre)
 
-    return res, valid, UA, PA, Ce, Oe, CSI, F1, SR, K, A
+    return ras_result, valid, UA, PA, Ce, Oe, CSI, F1, SR, K, A, b, Pre
 
 
 def delete_shapefile(shp_path):
