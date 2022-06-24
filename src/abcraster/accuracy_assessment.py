@@ -25,7 +25,7 @@ from abcraster.input import rasterize
 from abcraster.sampling import gen_random_sample
 
 
-def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath=None, sampling=None,
+def run(ras_data_filepath, ref_data_filepath, out_dirpath, samples_filepath=None, sampling=None,
         diff_ras_out_filename='val.tif', v_reprojected_filename='reproj_tmp.shp',
         v_rasterized_filename='rasterized_ref.tif', out_csv_filename='val.csv', ex_filepath=None,
         delete_tmp_files=False):
@@ -40,13 +40,13 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath=None,
         Path of reference data.
     out_dirpath: str
         Path of the output directory.
-    sample_filepath: str, optional
+    samples_filepath: str, optional
         Path of sampling raster or None if no sampling should be performed (default: None).
     sampling: list, tuple or int, optional
         stratified sampling = list/tuple of number samples, matching iterable index to class encoding
         non-stratified sampling = integer number of class-independent samples
-        None = this implies samples are loaded from sample_filepath (default: None),
-        *sampling is superseded if sample_filepath is None
+        None = this implies samples are loaded from samples_filepath (default: None),
+        *sampling is superseded if samples_filepath is None
     diff_ras_out_filename: str, optional
         Output path of the difference layer file (default: 'val.tif').
     v_reprojected_filename: str, optional
@@ -113,18 +113,18 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, sample_filepath=None,
         raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
 
     # sampling logic
-    if sample_filepath is None:
+    if samples_filepath is None:
         # no sampling
         samples = None
     else:
         if sampling is None:
-            with GeoTiffFile(sample_filepath, auto_decode=False) as src:
+            with GeoTiffFile(samples_filepath, auto_decode=False) as src:
                 # assumes there is a sampling raster existing, then reads it
                 samples = src.read(return_tags=False)
         else:
             # performs sampling
             samples = gen_random_sample(sampling, input_data, ref_data, exclusion=ex_data, nodata=255)
-            with GeoTiffFile(sample_filepath, mode='w', count=1, geotransform=gt, spatialref=sref) as src:
+            with GeoTiffFile(samples_filepath, mode='w', count=1, geotransform=gt, spatialref=sref) as src:
                 src.write(samples, band=1, nodata=[255])
 
     print('Start validation')

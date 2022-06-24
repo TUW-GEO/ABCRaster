@@ -212,7 +212,7 @@ def command_line_interface():
     parser.add_argument("-nd", "--nodata",
                         help="No data value.", required=False, type=int, default=255)
     parser.add_argument("-stf", "--stratify",
-                        help="Stratified.", required=False, type=bool, default=True)
+                        help="Stratification based on reference data.", required=False, type=bool, default=True)
 
     # collect inputs
     args = parser.parse_args()
