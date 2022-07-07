@@ -50,6 +50,13 @@ def command_line_interface():
     parser.add_argument("-del", "--delete_tmp",
                         help="Option to delete temporary files.", required=False, type=bool)
 
+    parser.add_argument("-all", "--all_metrics", help="Option to compute all metrics.",
+                        default=True, action="store_true")
+    parser.add_argument('-na', "--not_all_metrics", dest='all_metrics', action='store_false',
+                        help="Option not to compute all metrics, metrics should be specified if activated.")
+    parser.add_argument("-mts", "--metrics", nargs="+", required=False, type=str,
+                        help="Option to list metrics to run.")
+
     # collect inputs
     args = parser.parse_args()
     input_raster_filepath = args.input_filepath
@@ -61,6 +68,13 @@ def command_line_interface():
     strat = args.stratify
     sampling = args.num_samples
     samples_filepath = args.samples_filepath
+
+    if (args.all_metrics):
+        # add all metrics to
+        metrics_list = ['OA', 'K', 'CSI', 'F1', 'SR', 'B', 'P']
+    else:
+        #add check for each metric
+        metrics_list = args.metrics
 
     if sampling is not None:
         if strat:
@@ -87,7 +101,7 @@ def command_line_interface():
         diff_ras_out_filename=out_raster_filename, v_reprojected_filename=reproj_shp_filepath,
         v_rasterized_filename=rasterized_shp_filepath, out_csv_filename=output_csv_filepath,
         ex_filepath=exclusion_filepath, delete_tmp_files=delete_tmp,
-        sampling=sampling, samples_filepath=samples_filepath)
+        sampling=sampling, samples_filepath=samples_filepath, metrics_list=metrics_list)
 
 
 if __name__ == '__main__':

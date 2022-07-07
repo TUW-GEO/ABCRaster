@@ -2,10 +2,12 @@ import math
 
 
 def overall_accuracy(conf):
+    """Overall Accuracy"""
     return (conf['TP'] + conf['TN']) / (conf['TP'] + conf['TN'] + conf['FP'] + conf['FN'])
 
 
 def kappa(conf):
+    """Kappa"""
     pe1 = (conf['TP'] + conf['FN']) * (conf['TP'] + conf['FP']) + (conf['FP'] + conf['TN']) * (conf['FN'] + conf['TN'])
     pe2 = conf['TP'] + conf['TN'] + conf['FP'] + conf['FN']
     pe = pe1 / pe2 ** 2
@@ -14,20 +16,24 @@ def kappa(conf):
 
 
 def users_producers_accuracy(conf):
+    '''needs to be separated'''
     ua = conf['TP'] / (conf['TP'] + conf['FP'])
     pa = conf['TP'] / (conf['TP'] + conf['FN'])  # accuracy:PP2 as defined in ACube4Floods 5.1
     return ua, pa
 
 
 def critical_success_index(conf):
+    """Critical Success Index"""
     return conf['TP'] / (conf['TP'] + conf['FP'] + conf['FN'])
 
 
 def f1_score(conf):
+    """F1 Score"""
     return (2 * conf['TP']) / (2 * conf['TP'] + conf['FN'] + conf['FP'])
 
 
 def comission_omission_error(conf):
+    '''needs to be separated'''
     ce = conf['FP'] / (conf['FP'] + conf['TP'])  # inverse of precision
     oe = conf['FN'] / (conf['FN'] + conf['TP'])  # inverse of recall
     return ce, oe
@@ -39,6 +45,7 @@ def penalization(conf):
 
 
 def success_rate(conf):
+    """Success Rate"""
     # Success rate as defined in ACube4Floods 5.1
     ua, pa = users_producers_accuracy(conf)
     p = penalization(conf)
@@ -46,10 +53,15 @@ def success_rate(conf):
 
 
 def bias(conf):
+    """Bias"""
     # bias as shown in the GFM proposal
     return (conf['TP'] + conf['FP']) / (conf['TP'] + conf['FN'])
 
 
 def prevalence(conf):
+    """Prevalence"""
     # prevalence as defined by Dasgupta (in preparation)
     return (conf['TP'] + conf['FN']) / (conf['TP'] + conf['FN'] + conf['TN'] + conf['FP'])
+
+
+metrics = {'OA': overall_accuracy, 'K': kappa, 'CSI': critical_success_index, 'B': bias, 'P': prevalence}

@@ -23,6 +23,7 @@ import pandas as pd
 from veranda.io.geotiff import GeoTiffFile
 from abcraster.input import rasterize
 from abcraster.sampling import gen_random_sample
+from abcraster.metrics import metrics
 
 
 class Validation:
@@ -154,7 +155,7 @@ class Validation:
         # write output
         if samples_filepath is not None:
             with GeoTiffFile(samples_filepath, mode='w', count=1, geotransform=self.gt, spatialref=self.sref) as src:
-                src.write(samples, band=1, nodata=[255])
+                src.write(self.samples, band=1, nodata=[255])
 
     def load_sampling(self, samples_filepath):
         """Loads the samples from a raster file."""
@@ -221,3 +222,39 @@ def delete_shapefile(shp_path):
     driver = ogr.GetDriverByName("ESRI Shapefile")
     if os.path.exists(shp_path):
         driver.DeleteDataSource(shp_path)
+
+
+def run(ras_data_filepath, ref_data_filepath, out_dirpath, samples_filepath=None, sampling=None,
+        diff_ras_out_filename='val.tif', v_reprojected_filename='reproj_tmp.shp',
+        v_rasterized_filename='rasterized_ref.tif', out_csv_filename='val.csv', ex_filepath=None,
+        delete_tmp_files=False, metrics_list=[]):
+
+    v = Validation(ras_data_filepath, ref_data_filepath, out_dirpath, v_reprojected_filename,
+                 v_rasterized_filename, ex_filepath, delete_tmp_files,
+                 ras_data_nodata=255, ref_data_nodata=255)
+
+    if samples_filepath is not None:
+        if sampling is None:
+            v.load_sampling(samples_filepath)
+        else:
+            v.define_sampling(sampling, samples_filepath=samples_filepath)
+
+    v.accuracy_assessment()
+
+    v.write_confusion_map(diff_ras_out_filename)
+
+    input_base_filename = os.path.basename(ref_data_filepath)
+
+    result = [input_base_filename]
+    cols = ['file']
+
+    for m in metrics_list:
+        metric = metrics(m)
+        result += [v.calculate_accuracy_metric(metric)]
+        cols += [metric.__doc__]
+
+    df = pd.DataFrame(result, cols)
+
+    df.to_csv(out_csv_filename)
+
+    print(df)
