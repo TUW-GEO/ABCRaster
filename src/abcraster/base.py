@@ -27,6 +27,7 @@ from abcraster.metrics import metrics
 
 class Validation:
     """Class to perform a validation of binary classification results."""
+
     def __init__(self, ras_data_filepath, ref_data_filepath, out_dirpath, v_reprojected_filename='reproj_tmp.shp',
                  v_rasterized_filename='rasterized_ref.tif', ex_filepath=None, delete_tmp_files=False,
                  ras_data_nodata=255, ref_data_nodata=255):
@@ -223,37 +224,60 @@ def delete_shapefile(shp_path):
         driver.DeleteDataSource(shp_path)
 
 
-def run(ras_data_filepath, ref_data_filepath, out_dirpath, samples_filepath=None, sampling=None,
+def run(ras_data_filepaths, ref_data_filepath, out_dirpath, samples_filepath=None, sampling=None,
         diff_ras_out_filename='val.tif', v_reprojected_filename='reproj_tmp.shp',
         v_rasterized_filename='rasterized_ref.tif', out_csv_filename='val.csv', ex_filepath=None,
         delete_tmp_files=False, metrics_list=[]):
 
-    v = Validation(ras_data_filepath, ref_data_filepath, out_dirpath, v_reprojected_filename,
-                 v_rasterized_filename, ex_filepath, delete_tmp_files,
-                 ras_data_nodata=255, ref_data_nodata=255)
-
-    if samples_filepath is not None:
-        if sampling is None:
-            v.load_sampling(samples_filepath)
-        else:
-            v.define_sampling(sampling, samples_filepath=samples_filepath)
-
-    v.accuracy_assessment()
-
-    v.write_confusion_map(diff_ras_out_filename)
-
-    input_base_filename = os.path.basename(ras_data_filepath)
-    ref_base_filename = os.path.basename(ref_data_filepath)
-
-    result = [input_base_filename, ref_base_filename]
+    print(ras_data_filepaths)
+    results = []
     cols = ['input file', 'reference file']
+
+    delete_tmp_files_in = False #  by default retain temporary files to reuse for subsequent runs
 
     for m in metrics_list:
         metric = metrics[m]
-        result += [v.calculate_accuracy_metric(metric)]
         cols += [metric.__doc__]
 
-    df = pd.DataFrame(result, cols)
+    #for ras_data_filepath in ras_data_filepaths:
+    for i in range(len(ras_data_filepaths)):
+        ras_data_filepath = ras_data_filepaths[i]
+
+        if i == len(ras_data_filepaths) - 1: #  if last run use delete flag from cli
+            delete_tmp_files_in = delete_tmp_files
+
+        v = Validation(ras_data_filepath, ref_data_filepath, out_dirpath, v_reprojected_filename,
+                       v_rasterized_filename, ex_filepath, delete_tmp_files_in,
+                       ras_data_nodata=255, ref_data_nodata=255)
+
+        if samples_filepath is not None:
+            if sampling is None:
+                v.load_sampling(samples_filepath)
+            else:
+                v.define_sampling(sampling, samples_filepath=samples_filepath)
+                sampling = None #set to none to use after 1st sampling file created
+
+        v.accuracy_assessment()
+
+        v.write_confusion_map(diff_ras_out_filename)
+
+        input_base_filename = os.path.basename(ras_data_filepath)
+        ref_base_filename = os.path.basename(ref_data_filepath)
+
+        result = [input_base_filename, ref_base_filename]
+
+        for m in metrics_list:
+            metric = metrics[m]
+            result += [v.calculate_accuracy_metric(metric)]
+
+        results += [result]
+
+        ref_file_ext = os.path.splitext(os.path.basename(ref_data_filepath))[1]
+        if ref_file_ext == '.shp':
+            ref_data_filepath = v_rasterized_filename
+
+
+    df = pd.DataFrame(results, columns=cols)
 
     df.to_csv(out_csv_filename)
 

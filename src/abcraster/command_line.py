@@ -27,9 +27,9 @@ def command_line_interface():
     # define parser
     parser = argparse.ArgumentParser(
         description="Simple Binary Validation Workflow. Initially designed to validate floods")
-    parser.add_argument("-in", "--input_filepath",
+    parser.add_argument("-in", "--input_filepaths",
                         help="Full file path to the binary raster data 1= presence, 0=absence, for now 255=nodata.",
-                        required=True, type=str)
+                        required=True, nargs="+", type=str)
     parser.add_argument("-ref", "--reference_filepath",
                         help="Full file path to the validation dataset (.tif or .shp, in any projection)",
                         required=True, type=str)
@@ -61,7 +61,7 @@ def command_line_interface():
 
     # collect inputs
     args = parser.parse_args()
-    input_raster_filepath = args.input_filepath
+    input_raster_filepaths = args.input_filepaths
     exclusion_filepath = args.exclusion_filepath
     validation_filepath = args.reference_filepath
     output_raster_filepath = args.output_raster
@@ -83,7 +83,8 @@ def command_line_interface():
             if m not in metrics:
                 raise RuntimeError('Metric key ({}) not found!'.format(m))
 
-    if len(args.metrics) > 0 and args.all_metrics:
+
+    if args.metrics is not None and len(args.metrics) > 0 and args.all_metrics:
         print("WARNING: Specific metrics specified but all metrics selected. Proceeding with all metrics")
 
     if sampling is not None:
@@ -107,7 +108,7 @@ def command_line_interface():
     if delete_tmp is None:
         delete_tmp = False
 
-    run(ras_data_filepath=input_raster_filepath, ref_data_filepath=validation_filepath, out_dirpath=out_dirpath,
+    run(ras_data_filepaths=input_raster_filepaths, ref_data_filepath=validation_filepath, out_dirpath=out_dirpath,
         diff_ras_out_filename=out_raster_filename, v_reprojected_filename=reproj_shp_filepath,
         v_rasterized_filename=rasterized_shp_filepath, out_csv_filename=output_csv_filepath,
         ex_filepath=exclusion_filepath, delete_tmp_files=delete_tmp,
