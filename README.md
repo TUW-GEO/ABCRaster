@@ -18,7 +18,7 @@ Overall accuracy (OA) is computed as follows:
 ![OA=\frac{TP+TN}{TP+TN+FP+FN}](https://latex.codecogs.com/svg.latex?OA=\frac{TP+TN}{TP+TN+FP+FN}) 
 
 
-Cohen's Kappa Coefficient is computed from:
+Cohen's Kappa Coefficient (K) is computed from:
 
 ![\kappa=\frac{OA+P_e}{1-P_e}](https://latex.codecogs.com/svg.latex?\kappa=\frac{OA+P_e}{1-P_e}) 
 
@@ -35,11 +35,11 @@ Producer's Accuracy (PA) or Recall is computed by:
 
 ![PA=\frac{TP}{(TP+FN)}](https://latex.codecogs.com/svg.latex?PA=\frac{TP}{(TP+FN)}) 
 
-Critical Success Index is computed by:
+Critical Success Index (CSI) is computed by:
 
 ![CSI=\frac{TP}{(TP+FP+FN)}](https://latex.codecogs.com/svg.latex?CSI=\frac{TP}{(TP+FP+FN)}) 
 
-F1 is computed by:
+F1 Score (F1) is computed by:
 
 ![F1=\frac{2TP}{(2TP+FN+FP)}](https://latex.codecogs.com/svg.latex?F1=\frac{2TP}{(2TP+FN+FP)}) 
 
@@ -51,11 +51,11 @@ Success Rate (SR) is computed by:
 
 ![SR=PA-(1-P)](https://latex.codecogs.com/svg.latex?SR=PA-(1-P)) 
 
-Bias is computed by:
+Bias (B) is computed by:
 
 ![b=(TP+FP)/(TP+FN)](https://latex.codecogs.com/svg.latex?b=(TP+FP)/(TP+FN))
  
-Prevalence is computed by:
+Prevalence (P) is computed by:
 
 ![Pre=(TP+FN)/(TP+FN+TN+FP)](https://latex.codecogs.com/svg.latex?Pre=(TP+FN)/(TP+FN+TN+FP))
 
@@ -89,8 +89,7 @@ In order to finish the setup of the GDAL environment, the following environment 
 ## Usage
 
 ### Scripting
-The functionality of ABCRaster can be accessed through the `run` function inside of the `accuracy_assessment`
-module.
+The functionality of ABCRaster can be accessed through the `run` function inside of the `base` module.
 
 ### Command line
 
@@ -111,7 +110,16 @@ for now 255=nodata
 
 `-ns` or `--num_samples` -- Number of total samples if sampling will be applied (optional!)
 
-`-stf` or `--stratify` -- Stratification based on reference data (optional!)
+`-stf` or `--stratify` -- Stratification flag (no input required) based on reference data (optional!)
+
+`-nst` or `--no_stratify` -- No stratification flag option (optional!)
 
 `-sfp` or `--samples_filepath` -- Full file path to the sampling raster dataset (.tif ), if num samples not specified, \
                         assumes samples will be read from this path (optional!)
+
+`-all` or `--all_metrics` -- Flag to indicate to compute all metrics, Default true. (optional!)
+
+`-na` or `--not_all_metrics` -- Flag to indicate not to compute all metrics, 
+                        metrics should be specified if activated. (optional!)
+
+`-mts` or  `--metrics` -- Optional list of metrics (keys) to run e.g. OA, UA, K. See metrics in `( )` above list.

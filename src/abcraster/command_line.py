@@ -15,7 +15,8 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-from abcraster.accuracy_assessment import run
+from abcraster.base import run
+from abcraster.metrics import metrics
 import argparse
 import os
 
@@ -37,8 +38,10 @@ def command_line_interface():
                         required=False, type=str)
     parser.add_argument("-ns", "--num_samples",
                         help="number of total samples if sampling will be applied.", required=False, type=int)
-    parser.add_argument("-stf", "--stratify",
-                        help="Stratification based on reference data", required=False, type=bool, default=True)
+    parser.add_argument("-stf", "--stratify", help="Stratification based on reference data", required=False,
+                        default=True, action="store_true")
+    parser.add_argument("-nst", "--no_stratify", dest='stratify', action='store_false',
+                        help="No Stratification option")
     parser.add_argument("-sfp", "--samples_filepath",
                         help="Full file path to the sampling raster dataset (.tif ), if num samples not specified, \
                         assumes samples will be read from this path",
@@ -49,7 +52,6 @@ def command_line_interface():
                         help="Full file path to the csv results", required=False, type=str)
     parser.add_argument("-del", "--delete_tmp",
                         help="Option to delete temporary files.", required=False, type=bool)
-
     parser.add_argument("-all", "--all_metrics", help="Option to compute all metrics.",
                         default=True, action="store_true")
     parser.add_argument('-na', "--not_all_metrics", dest='all_metrics', action='store_false',
@@ -69,12 +71,20 @@ def command_line_interface():
     sampling = args.num_samples
     samples_filepath = args.samples_filepath
 
-    if (args.all_metrics):
-        # add all metrics to
-        metrics_list = ['OA', 'K', 'CSI', 'F1', 'SR', 'B', 'P']
+    if args.all_metrics:
+        metrics_list = metrics.keys()  # all metrics as defined in metrics dictionary
     else:
-        #add check for each metric
         metrics_list = args.metrics
+
+        if len(metrics_list) == 0:
+            raise RuntimeError('Metric keys list not found!')
+
+        for m in metrics_list:
+            if m not in metrics:
+                raise RuntimeError('Metric key ({}) not found!'.format(m))
+
+    if len(args.metrics) > 0 and args.all_metrics:
+        print("WARNING: Specific metrics specified but all metrics selected. Proceeding with all metrics")
 
     if sampling is not None:
         if strat:

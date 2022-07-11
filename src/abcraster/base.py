@@ -16,7 +16,6 @@
 
 
 import os
-import math
 from osgeo import ogr
 import numpy as np
 import pandas as pd
@@ -150,7 +149,7 @@ class Validation:
         """
 
         # performs sampling
-        self.samples = gen_random_sample(sampling, self.input_data, self.ref_data, exclusion=self.ex_data, nodata=255)
+        self.samples = gen_random_sample(sampling, self.input_data, self.ref_data, exclusion=self.ex_mask, nodata=255)
 
         # write output
         if samples_filepath is not None:
@@ -243,13 +242,14 @@ def run(ras_data_filepath, ref_data_filepath, out_dirpath, samples_filepath=None
 
     v.write_confusion_map(diff_ras_out_filename)
 
-    input_base_filename = os.path.basename(ref_data_filepath)
+    input_base_filename = os.path.basename(ras_data_filepath)
+    ref_base_filename = os.path.basename(ref_data_filepath)
 
-    result = [input_base_filename]
-    cols = ['file']
+    result = [input_base_filename, ref_base_filename]
+    cols = ['input file', 'reference file']
 
     for m in metrics_list:
-        metric = metrics(m)
+        metric = metrics[m]
         result += [v.calculate_accuracy_metric(metric)]
         cols += [metric.__doc__]
 
