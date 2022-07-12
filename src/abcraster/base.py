@@ -224,61 +224,111 @@ def delete_shapefile(shp_path):
         driver.DeleteDataSource(shp_path)
 
 
-def run(ras_data_filepaths, ref_data_filepath, out_dirpath, samples_filepath=None, sampling=None,
+def run(ras_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samples_filepath=None, sampling=None,
         diff_ras_out_filename='val.tif', v_reprojected_filename='reproj_tmp.shp',
         v_rasterized_filename='rasterized_ref.tif', out_csv_filename='val.csv', ex_filepath=None,
-        delete_tmp_files=False, metrics_list=[]):
+        delete_tmp_files=False):
+    """
+    Runs a validation workflow.
 
-    print(ras_data_filepaths)
+    Parameters
+    ----------
+    ras_data_filepaths: list, str
+        Paths of binary classified raster tiff files.
+    ref_data_filepath: str
+        Path of reference data.
+    out_dirpath: str
+        Path of the output directory.
+    metrics_list: list, str
+        List of metric (function) keys defined in abcraster.metrics.metrics dictionary.
+    samples_filepath: str, optional
+        Path of sampling raster or None if no sampling should be performed (default: None).
+    sampling: list, tuple or int, optional
+        stratified sampling = list/tuple of number samples, matching iterable index to class encoding
+        non-stratified sampling = integer number of class-independent samples
+        None = this implies samples are loaded from samples_filepath (default: None),
+        *sampling is superseded if samples_filepath is None
+    diff_ras_out_filename: str, optional
+        Output path of the difference layer file (default: 'val.tif').
+    v_reprojected_filename: str, optional
+        Output path of the reprojected vector layer file (default: 'reproj_tmp.shp').
+    v_rasterized_filename: str, optional
+        Output path of the rasterized reference data (default: 'rasterized_val.tif').
+    out_csv_filename: str, optional
+        Output path of the validation measures as csv file. If set to None, no csv file is written (default: 'val.csv').
+    ex_filepath: str, optional
+        Path of the exclusion layer which is not applied if set to None (default: None).
+    delete_tmp_files: bool, optional
+        Option to delete all temporary files (default: False).
+    Returns
+    -------
+    df: Pandas dataframe
+        Dataframe containing the resulting validation measures. df is printed and written to csv TODO: fix output logic
+    """
+
+
+    ref_data_filepath_current = ref_data_filepath  # temporary place holder
+    delete_tmp_files_current = False  # by default retain temporary files to reuse for subsequent runs
+    num_inputs = len(ras_data_filepaths)
+
     results = []
     cols = ['input file', 'reference file']
-
-    delete_tmp_files_in = False #  by default retain temporary files to reuse for subsequent runs
 
     for m in metrics_list:
         metric = metrics[m]
         cols += [metric.__doc__]
 
-    #for ras_data_filepath in ras_data_filepaths:
-    for i in range(len(ras_data_filepaths)):
+    for i in range(num_inputs):
         ras_data_filepath = ras_data_filepaths[i]
-
-        if i == len(ras_data_filepaths) - 1: #  if last run use delete flag from cli
-            delete_tmp_files_in = delete_tmp_files
-
-        v = Validation(ras_data_filepath, ref_data_filepath, out_dirpath, v_reprojected_filename,
-                       v_rasterized_filename, ex_filepath, delete_tmp_files_in,
-                       ras_data_nodata=255, ref_data_nodata=255)
-
-        if samples_filepath is not None:
-            if sampling is None:
-                v.load_sampling(samples_filepath)
-            else:
-                v.define_sampling(sampling, samples_filepath=samples_filepath)
-                sampling = None #set to none to use after 1st sampling file created
-
-        v.accuracy_assessment()
-
-        v.write_confusion_map(diff_ras_out_filename)
 
         input_base_filename = os.path.basename(ras_data_filepath)
         ref_base_filename = os.path.basename(ref_data_filepath)
 
+        v = Validation(ras_data_filepath, ref_data_filepath_current, out_dirpath, v_reprojected_filename,
+                       v_rasterized_filename, ex_filepath, delete_tmp_files_current,
+                       ras_data_nodata=255, ref_data_nodata=255)
+
+        if samples_filepath is not None:  # logic, could be integrated in the object/class
+            if sampling is None:
+                v.load_sampling(samples_filepath)
+            else:
+                v.define_sampling(sampling, samples_filepath=samples_filepath)
+                sampling = None  # set to none, to use after 1st sampling file created
+
+        v.accuracy_assessment()
+        if num_inputs > 1:
+            # overrride output file name
+            # naming the output files based on input and reference
+            diff_ras_out_filename = os.path.join(out_dirpath, '{}--{}.tif'.format(input_base_filename.split('.')[0],
+                                                                   ref_base_filename.split('.')[0]))
+
+        v.write_confusion_map(os.path.join(out_dirpath, diff_ras_out_filename))
+
         result = [input_base_filename, ref_base_filename]
 
+        #computes the selected metrics
         for m in metrics_list:
             metric = metrics[m]
             result += [v.calculate_accuracy_metric(metric)]
-
         results += [result]
 
         ref_file_ext = os.path.splitext(os.path.basename(ref_data_filepath))[1]
         if ref_file_ext == '.shp':
-            ref_data_filepath = v_rasterized_filename
+            ref_data_filepath_current = v_rasterized_filename  # use the temporary rasterized reference
+
+        if i == num_inputs - 1: #  if last run use delete flag from cli
+            if delete_tmp_files:
+                os.remove(v_rasterized_filename)
+                delete_shapefile(v_reprojected_filename)
+
+    if num_inputs == 1: #changed output format for multiple results
+        df = pd.DataFrame(results[0], cols)
+        print(df)
+    else:
+        df = pd.DataFrame(results, columns=cols)
+
+    df.to_csv(os.path.join(out_dirpath, out_csv_filename))
+
+    return df
 
 
-    df = pd.DataFrame(results, columns=cols)
-
-    df.to_csv(out_csv_filename)
-
-    print(df)
