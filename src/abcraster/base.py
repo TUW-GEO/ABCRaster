@@ -318,8 +318,8 @@ def run(ras_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, sample
 
         if i == num_inputs - 1: #  if last run use delete flag from cli
             if delete_tmp_files:
-                os.remove(v_rasterized_filename)
-                delete_shapefile(v_reprojected_filename)
+                os.remove(os.path.join(out_dirpath, v_rasterized_filename))
+                delete_shapefile(os.path.join(out_dirpath, v_reprojected_filename))
 
     if num_inputs == 1: #changed output format for multiple results
         df = pd.DataFrame(results[0], cols)
