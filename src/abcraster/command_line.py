@@ -83,6 +83,9 @@ def command_line_interface():
             if m not in metrics:
                 raise RuntimeError('Metric key ({}) not found!'.format(m))
 
+    if len(input_raster_filepaths) > 1 and output_csv_filepath is None:
+        raise RuntimeError('Output CSV file is required for multiple input files')
+
 
     if args.metrics is not None and len(args.metrics) > 0 and args.all_metrics:
         print("WARNING: Specific metrics specified but all metrics selected. Proceeding with all metrics")

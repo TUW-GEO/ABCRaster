@@ -170,7 +170,7 @@ def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255, ex_pat
         ref_sref = src.spatialref
 
     if ref_gt != data_gt | ref_sref != data_sref:
-        raise RuntimeError("Grid/projection of input and reference data are not the same!")
+        print("WARNING: Grid/projection of input and reference data are not the same!")
 
     if ex_path is not None:
         with GeoTiffFile(ex_path, auto_decode=False) as src:

@@ -94,7 +94,7 @@ class Validation:
                 ref_sref = src.spatialref
 
                 if ref_gt != self.gt or ref_sref != self.sref:
-                    raise RuntimeError("Grid/projection of input and reference data are not the same!")
+                    print("WARNING: Grid/projection of input and reference data are not the same!")
         else:
             raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
 
@@ -123,13 +123,18 @@ class Validation:
 
         # apply sampling
         if self.samples is not None:
-            res[self.samples == 255] = 255
-
-        # define confusion matrix
-        tp = np.sum(res == 2)
-        tn = np.sum(res == 1)
-        fn = np.sum(res == 0)
-        fp = np.sum(res == 3)
+            res_dcopy = np.array([x for x in res])
+            res_dcopy[self.samples == 255] = 255
+            tp = np.sum(res_dcopy == 2)
+            tn = np.sum(res_dcopy == 1)
+            fn = np.sum(res_dcopy == 0)
+            fp = np.sum(res_dcopy == 3)
+        else:
+            # define confusion matrix
+            tp = np.sum(res == 2)
+            tn = np.sum(res == 1)
+            fn = np.sum(res == 0)
+            fp = np.sum(res == 3)
         self.confusion_matrix = np.array([[tp, fp], [fn, tn]])
 
     def define_sampling(self, sampling, opt_stratification=False, samples_filepath=None):
@@ -266,7 +271,6 @@ def run(ras_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, sample
         Dataframe containing the resulting validation measures. df is printed and written to csv TODO: fix output logic
     """
 
-
     ref_data_filepath_current = ref_data_filepath  # temporary place holder
     delete_tmp_files_current = False  # by default retain temporary files to reuse for subsequent runs
     num_inputs = len(ras_data_filepaths)
@@ -300,7 +304,7 @@ def run(ras_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, sample
             # overrride output file name
             # naming the output files based on input and reference
             diff_ras_out_filename = os.path.join(out_dirpath, '{}--{}.tif'.format(input_base_filename.split('.')[0],
-                                                                   ref_base_filename.split('.')[0]))
+                                                                                ref_base_filename.split('.')[0]))
 
         v.write_confusion_map(os.path.join(out_dirpath, diff_ras_out_filename))
 
