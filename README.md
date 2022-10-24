@@ -93,7 +93,7 @@ The functionality of ABCRaster can be accessed through the `run` function inside
 
 ### Command line
 
-`python -m abcraster.cli`
+`python -m abcraster.command_line` or running `abcraster`
 
 `-in` or `--input_filepath` -- Full file path to the binary raster data 1= presence, 0=absennce, for now 255=nodata.
 

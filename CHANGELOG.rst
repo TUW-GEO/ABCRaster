@@ -2,6 +2,12 @@
 Changelog
 =========
 
+Version 0.3.0
+===========
+
+- Modified structure
+- Added mulitple flood map inputs to CLI
+
 Version 0.2.0
 ===========
 
