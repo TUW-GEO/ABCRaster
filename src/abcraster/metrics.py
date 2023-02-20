@@ -75,9 +75,30 @@ def prevalence(conf):
     return (conf['TP'] + conf['FN']) / (conf['TP'] + conf['FN'] + conf['TN'] + conf['FP'])
 
 
+def true_negative_rate(conf):
+    """True Negative Rate"""
+    return (conf['TN']) / (conf['FP'] + conf['TN'])
+
+
+def false_positive_rate(conf):
+    """False Positive Rate"""
+    return (conf['FP']) / (conf['FP'] + conf['TN'])
+
+
+def negative_predictive_value(conf):
+    """Negative Predictive Value"""
+    return (conf['TN']) / (conf['FN'] + conf['TN'])
+
+
+def false_omission_rate(conf):
+    """False Omission Rate"""
+    return (conf['FN']) / (conf['FN'] + conf['TN'])
+
+
 metrics = {'OA': overall_accuracy, 'K': kappa, 'CSI': critical_success_index, 'B': bias, 'P': prevalence,
            'UA': users_accuracy, 'PA': producers_accuracy, 'CE': commission_error, 'OE': omission_error,
-           'SR': success_rate, 'F1': f1_score}
+           'SR': success_rate, 'F1': f1_score, 'TNR': true_negative_rate, 'FPR': false_positive_rate,
+           'NPV': negative_predictive_value, 'FOR': false_omission_rate}
 
 # metric dictionary is used to map metric 'keys' to functions
 # docs strings to be used in output

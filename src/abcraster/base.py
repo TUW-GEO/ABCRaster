@@ -72,7 +72,7 @@ class Validation:
                 ex_sref = src.spatialref
 
                 if ex_gt != self.gt or ex_sref != self.sref:
-                    raise RuntimeError("Grid/projection of input and reference data are not the same!")
+                    print("Exclusion WARNING:Grid/projection of input and reference data are not the same!")
 
         # handle reference data input
         ref_file_ext = os.path.splitext(os.path.basename(ref_data_filepath))[1]
