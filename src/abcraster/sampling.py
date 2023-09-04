@@ -1,5 +1,5 @@
 import argparse
-from veranda.io.geotiff import GeoTiffFile
+from veranda.raster.native.geotiff import GeoTiffFile
 import numpy as np
 
 
@@ -15,18 +15,18 @@ def gen_random_sample(num_samples, data, ref, nodata=255, exclusion=None):
         - value in singletons i.e. [N] are treated as the total number of samples for all classes and would be equally
         distributed hence should be divisible by the number of classes. num classes detected from reference data values.
         - for non-stratified sampling pass an int.
-    data: numpy.array
+    data: np.ndarray
         (binary) classified data, assumes uint encoded.
-    ref: numpy.array
+    ref: np.ndarray
         reference data, assumes same data format and projection as (input) data
     nodata: int, optional
         nodata value, assumes the same for both reference and input data
-    exclusion: numpy.array
+    exclusion: np.ndarray
         exclusion mask, encoded as 1 or True to be removed from analysis
 
     Returns
     -------
-    samples: numpy.array
+    samples: np.ndarray
         Integer array, which contains the class id for the sample points and no data for other pixels.
     """
 
@@ -50,7 +50,7 @@ def gen_random_sample(num_samples, data, ref, nodata=255, exclusion=None):
             if num_samples % num_class != 0:
                 raise ValueError("If num_samples list/tuple is a singleton, it should be divisible by num_class.")
             num_samples = num_samples * num_class
-            num_samples = [int(sample/num_class) for sample in num_samples] #samples evenly distributed per class
+            num_samples = [int(sample/num_class) for sample in num_samples]  # samples evenly distributed per class
         elif len(num_samples) != num_class:
             raise ValueError("Dimension of samples do not correspond to the number of classes.")
 
@@ -81,18 +81,18 @@ def random_conditional_selection(arr, num, apriori_mask, cond=None):
 
     Parameters
     ----------
-    arr: numpy.array
+    arr: np.ndarray
         Array which includes integer values.
     num: int
         Number of indices which should be retrieved randomly.
-    apriori_mask: numpy.array
+    apriori_mask: np.ndarray
         Boolean array showing the pixels which should be excluded a priori.
     cond: int, optional
         Specific integers to which the selection should be limited to or no limitation (=None).
 
     Returns
     -------
-    idx: numpy.array
+    idx: np.ndarray
         Array containing selected indices.
     """
 
@@ -144,12 +144,12 @@ def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255, ex_pat
     """
 
     with GeoTiffFile(data_path, auto_decode=False) as src:
-        data = src.read(return_tags=False)
-        data_gt = src.geotransform
-        data_sref = src.spatialref
+        data = src.read()[1]
+        data_gt = src.geotrans
+        data_sref = src.sref_wkt
 
     with GeoTiffFile(ref_path, auto_decode=False) as src:
-        ref = src.read(return_tags=False)
+        ref = src.read()[1]
         ref_gt = src.geotransform
         ref_sref = src.spatialref
 
@@ -158,10 +158,10 @@ def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255, ex_pat
 
     if ex_path is not None:
         with GeoTiffFile(ex_path, auto_decode=False) as src:
-            ex = src.read(return_tags=False)
+            ex = src.read()[1]
             ex_gt = src.geotransform
             ex_sref = src.spatialref
-            ex = ex.astype(bool) #force boolean type
+            ex = ex.astype(bool)  # force boolean type
 
         if ex_gt != data_gt | ex_sref != data_sref:
             raise RuntimeError("Grid/projection of input and exclusion data are not the same!")
@@ -170,8 +170,8 @@ def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255, ex_pat
 
     samples = gen_random_sample(num_samples, data, ref, nodata=nodata, exclusion=ex)
 
-    with GeoTiffFile(out_path, mode='w', count=1, geotransform=ref_gt, spatialref=ref_sref) as src:
-        src.write(samples.astype(np.uint8), band=1, nodata=nodata)
+    with GeoTiffFile(out_path, mode='w', geotrans=ref_gt, sref_wkt=ref_sref, nodatavals=[255], overwrite=True) as src:
+        src.write(samples.astype(np.uint8))
 
 
 def command_line_interface():
@@ -211,7 +211,7 @@ def command_line_interface():
     strat = args.stratify
 
     if strat:
-        num_samples = [int(n/2), int(n/2)] #use case is binary classified data
+        num_samples = [int(n/2), int(n/2)]  # use case is binary classified data
     else:
         num_samples = n
 
