@@ -13,8 +13,8 @@ class Validation:
     """Class to perform a validation of binary classification results."""
 
     def __init__(self, ras_data_filepath, ref_data_filepath, out_dirpath, v_reprojected_filename='reproj_tmp.shp',
-                 v_rasterized_filename='rasterized_ref.tif', ex_filepath=None, delete_tmp_files=False,
-                 ras_data_nodata=255, ref_data_nodata=255):
+                 v_rasterized_filename='rasterized_ref.tif', delete_tmp_files=False, ras_data_nodata=255,
+                 ref_data_nodata=255):
         """
         Loads and harmonizes the classification resultan d reference data.
 
@@ -30,8 +30,6 @@ class Validation:
             Output path of the reprojected vector layer file (default: 'reproj_tmp.shp').
         v_rasterized_filename: str, optional
             Output path of the rasterized reference data (default: 'rasterized_val.tif').
-        ex_filepath: str, optional
-            Path of the exclusion layer which is not applied if set to None (default: None).
         delete_tmp_files: bool, optional
             Option to delete all temporary files (default: False).
         ras_data_nodata: int, optional
@@ -45,18 +43,6 @@ class Validation:
             self.input_data = src.read()[1]
             self.gt = src.geotrans
             self.sref = src.sref_wkt
-
-        # load exclusion mask
-        if ex_filepath is None:
-            self.ex_mask = None
-        else:
-            with GeoTiffFile(ex_filepath) as src:
-                self.ex_mask = src.read()[1]
-                ex_gt = src.geotrans
-                ex_sref = src.sref_wkt
-
-                if ex_gt != self.gt or ex_sref != self.sref:
-                    print("Exclusion WARNING:Grid/projection of input and reference data are not the same!")
 
         # handle reference data input
         ref_file_ext = os.path.splitext(os.path.basename(ref_data_filepath))[1]
@@ -89,6 +75,7 @@ class Validation:
         self.confusion_map = None
         self.input_nodata = ras_data_nodata
         self.ref_nodata = ref_data_nodata
+        self.out_dirpath = out_dirpath
 
     def accuracy_assessment(self):
         """Runs validation on aligned numpy arrays."""
@@ -97,13 +84,6 @@ class Validation:
         res = 1 + (2 * self.input_data) - self.ref_data
         res[self.input_data == self.input_nodata] = 255
         res[self.ref_data == self.ref_nodata] = 255
-
-        # applying exclusion, setting exclusion pixels as no data
-        if self.ex_mask is not None:
-            res[self.ex_mask == 1] = 255
-            self.input_data[self.ex_mask == 1] = 255
-
-        # store confusion map
         self.confusion_map = res
 
         # apply sampling
@@ -138,7 +118,7 @@ class Validation:
         """
 
         # performs sampling
-        self.samples = gen_random_sample(sampling, self.input_data, self.ref_data, exclusion=self.ex_mask, nodata=255)
+        self.samples = gen_random_sample(sampling, self.input_data, self.ref_data, nodata=255)
 
         # write output
         if samples_filepath is not None:
@@ -151,6 +131,40 @@ class Validation:
 
         with GeoTiffFile(samples_filepath) as src:
             self.samples = src.read()[1]
+
+    def apply_mask(self, mask_path):
+        """
+        Apply a raster or vector mask to the input data.
+
+        Parameters
+        ----------
+        mask_path: str
+            Path of the mask to be applied.
+        """
+
+        # load mask layer
+        mask_ext = os.path.splitext(os.path.basename(mask_path))[1]
+        if mask_ext == '.shp':
+            vec_ds = ogr.Open(mask_path)
+            v_rasterized_path = os.path.join(self.out_dirpath, 'mask_rasterized.tif')
+            v_reprojected_path = os.path.join(self.out_dirpath, 'mask_vec_reproj.shp')
+            ex_mask = rasterize(vec_ds, v_rasterized_path, self.input_data, self.gt, self.sref,
+                                v_reprojected_filepath=v_reprojected_path)
+        elif mask_ext == '.tif':
+            with GeoTiffFile(mask_path) as src:
+                ex_mask = src.read()[1]
+                ex_gt = src.geotrans
+                ex_sref = src.sref_wkt
+
+                if ex_gt != self.gt or ex_sref != self.sref:
+                    print("Exclusion WARNING:Grid/projection of input and reference data are not the same!")
+                    # TODO: transform mask layer to match the input data
+        else:
+            raise ValueError("Input file with extension " + mask_ext + " is not supported.")
+
+        # apply mask
+        self.confusion_map[ex_mask == 1] = 255
+        self.input_data[ex_mask == 1] = 255
 
     def calculate_accuracy_metric(self, metric_func):
         """
@@ -274,10 +288,15 @@ def run(ras_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, sample
         input_base_filename = os.path.basename(ras_data_filepath)
         ref_base_filename = os.path.basename(ref_data_filepath)
 
+        # initialize validation object
         v = Validation(ras_data_filepath, ref_data_filepath_current, out_dirpath, v_reprojected_filename,
-                       v_rasterized_filename, ex_filepath, delete_tmp_files_current,
-                       ras_data_nodata=255, ref_data_nodata=255)
+                       v_rasterized_filename, delete_tmp_files_current, ref_data_nodata=255)
 
+        # apply exclusion mask
+        if ex_filepath is not None:
+            v.apply_mask(ex_filepath)
+
+        # handle sampling
         if samples_filepath is not None:  # logic, could be integrated in the object/class
             if sampling is None:
                 v.load_sampling(samples_filepath)
@@ -285,6 +304,7 @@ def run(ras_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, sample
                 v.define_sampling(sampling, samples_filepath=samples_filepath)
                 sampling = None  # set to none, to use after 1st sampling file created
 
+        # run accuracy estimation
         v.accuracy_assessment()
         if num_inputs > 1:
             # overrride output file name
