@@ -69,16 +69,16 @@ def vec_reproject(layer, out_sref, v_reprojected_filepath='tmp.shp'):
     outLayer = None
 
 
-def raster_reproject(ds1, ds2, out_dirpath, reproj_add_str):
+def raster_reproject(fpath, sref, out_dirpath, reproj_add_str):
     """
     Reprojects first raster dataset to the spatial reference of the second raster dataset.
 
     Parameters
     ----------
-    ds1: GeoTiffFile
-        GeoTiffFile object from veranda, which will be reprojected.
-    ds2: GeoTiffFile
-        GeoTiffFile object from veranda, which will be used as example dataset.
+    fpath: str
+        Raster file path to be reprojected.
+    sref: str
+        Aimed spatial reference as WKT.
     out_dirpath: str
         Directory to which the output will be written to.
     reproj_add_str: str
@@ -90,24 +90,24 @@ def raster_reproject(ds1, ds2, out_dirpath, reproj_add_str):
         Path of the reprojected raster file.
     """
 
-    out_reproj_path = update_filepath(ds1.filepath, add_str=reproj_add_str, new_root=out_dirpath)
+    out_reproj_path = update_filepath(fpath, add_str=reproj_add_str, new_root=out_dirpath)
 
-    warp = gdal.Warp(out_reproj_path, ds1.filepath, dstSRS=ds2.sref_wkt)
+    warp = gdal.Warp(out_reproj_path, fpath, dstSRS=sref)
     warp = None  # Closes the files
 
     return out_reproj_path
 
 
-def raster_intersect(ds1, ds2):
+def raster_intersect(geom1, geom2):
     """
     Retrieves the intersecting geometry from two raster datasets.
 
     Parameters
     ----------
-    ds1: GeoTiffFile
-        GeoTiffFile object from veranda.
-    ds2: GeoTiffFile
-        GeoTiffFile object from veranda.
+    geom1: RasterGeometry
+        Geometry of the first raster file.
+    geom2: RasterGeometry
+        Geometry of the second raster file.
 
     Returns
     -------
@@ -115,16 +115,11 @@ def raster_intersect(ds1, ds2):
         Geometry of the intersection.
     """
 
-    ras1 = RasterGeometry(n_rows=ds1.raster_shape[0], n_cols=ds1.raster_shape[1], sref=ds1.sref_wkt,
-                          geotrans=ds1.geotrans)
-    ras2 = RasterGeometry(n_rows=ds2.raster_shape[0], n_cols=ds2.raster_shape[1], sref=ds2.sref_wkt,
-                          geotrans=ds2.geotrans)
-
-    if not ras1.intersects(ras2):
+    if not geom1.intersects(geom2):
         raise ValueError("Input data does not intersect reference data.")
 
-    intersection = ras1.slice_by_geom(ras2, sref=ds2.sref_wkt)
-    intersection = intersection.slice_by_geom(ras1, sref=ds1.sref_wkt)
+    intersection = geom1.slice_by_geom(geom2, sref=geom2.sref.wkt)
+    intersection = intersection.slice_by_geom(geom1, sref=geom1.sref.wkt)
 
     return intersection
 

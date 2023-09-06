@@ -3,6 +3,7 @@ import argparse
 from osgeo import ogr
 import numpy as np
 import pandas as pd
+from geospade.raster import RasterGeometry
 from veranda.raster.native.geotiff import GeoTiffFile
 from abcraster.input import rasterize, raster_reproject, raster_intersect, raster_read_from_polygon, update_filepath
 from abcraster.sampling import gen_random_sample
@@ -71,18 +72,17 @@ class Validation:
                 ref_sref = ref_ds.sref_wkt
 
                 if ref_sref != input_sref:
-                    ref_reproj_path = raster_reproject(ref_ds, input_ds, out_dirpath, reproj_add_str)
-                else:
-                    ref_reproj_path = None
+                    ref_data_filepath = raster_reproject(ref_ds.filepath, input_ds.sref_wkt, out_dirpath,
+                                                         reproj_add_str)
 
                 if ref_gt != input_gt:
-                    intersect_geom = raster_intersect(input_ds, ref_ds)
+                    input_geom = RasterGeometry(n_rows=input_ds.raster_shape[0], n_cols=input_ds.raster_shape[1],
+                                                sref=input_ds.sref_wkt, geotrans=input_ds.geotrans)
+                    ref_geom = RasterGeometry(n_rows=ref_ds.raster_shape[0], n_cols=ref_ds.raster_shape[1],
+                                              sref=ref_ds.sref_wkt, geotrans=ref_ds.geotrans)
+                    intersect_geom = raster_intersect(input_geom, ref_geom)
                 else:
                     intersect_geom = None
-
-            # read input and reference data
-            if ref_reproj_path is not None:
-                ref_data_filepath = ref_reproj_path
 
             if intersect_geom is None:
                 self.input_data = input_ds.read()[1]
@@ -105,6 +105,8 @@ class Validation:
         self.input_nodata = ras_data_nodata
         self.ref_nodata = ref_data_nodata
         self.out_dirpath = out_dirpath
+        self.reproj_add_str = reproj_add_str
+        self.rasterized_add_str = rasterized_add_str
 
     def accuracy_assessment(self):
         """Runs validation on aligned numpy arrays."""
@@ -180,14 +182,20 @@ class Validation:
             ex_mask = rasterize(vec_ds, v_rasterized_path, self.input_data, self.gt, self.sref,
                                 v_reprojected_filepath=v_reprojected_path)
         elif mask_ext == '.tif':
-            with GeoTiffFile(mask_path) as src:
-                ex_mask = src.read()[1]
-                ex_gt = src.geotrans
-                ex_sref = src.sref_wkt
+            with GeoTiffFile(mask_path) as mask_ds:
+                mask_gt = mask_ds.geotrans
+                mask_sref = mask_ds.sref_wkt
 
-                if ex_gt != self.gt or ex_sref != self.sref:
-                    print("Exclusion WARNING:Grid/projection of input and reference data are not the same!")
-                    # TODO: transform mask layer to match the input data
+                if self.sref != mask_sref:
+                    mask_path = raster_reproject(mask_path, self.sref, self.out_dirpath, self.reproj_add_str)
+
+                if self.gt != mask_gt:
+                    geom = RasterGeometry(n_rows=self.input_data.shape[0], n_cols=self.input_data.shape[1],
+                                          sref=self.sref, geotrans=self.gt)
+                    ex_mask = raster_read_from_polygon(mask_path, geom)
+                else:
+                    ex_mask = mask_ds.read()[1]
+
         else:
             raise ValueError("Input file with extension " + mask_ext + " is not supported.")
 
