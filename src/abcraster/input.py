@@ -259,9 +259,10 @@ def update_filepath(fpath, add_str=None, new_ext=None, new_root=None):
 
     orig_dirpath, orig_fname = os.path.split(fpath)
     orig_name, orig_ext = os.path.splitext(orig_fname)
+    orig_ext = orig_ext.replace('.', '')
 
     add_str = '' if add_str is None else '_' + add_str
-    ext = new_ext if new_ext is not None else orig_ext
+    ext = new_ext.replace('.', '') if new_ext is not None else orig_ext
     dir_path = new_root if new_root is not None else orig_dirpath
 
     return os.path.join(dir_path, orig_name + add_str + '.' + ext)

@@ -170,8 +170,8 @@ def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255, ex_pat
 
     samples = gen_random_sample(num_samples, data, ref, nodata=nodata, exclusion=ex)
 
-    with GeoTiffFile(out_path, mode='w', geotrans=ref_gt, sref_wkt=ref_sref, nodatavals=[255], overwrite=True) as src:
-        src.write(samples.astype(np.uint8))
+    with GeoTiffFile(out_path, mode='w', geotrans=ref_gt, sref_wkt=ref_sref, nodatavals=255, overwrite=True) as src:
+        src.write(np.expand_dims(samples.astype(np.uint8), axis=0))
 
 
 def command_line_interface():

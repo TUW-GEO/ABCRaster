@@ -50,11 +50,9 @@ class Validation:
 
             # rasterize vector-based reference data
             vec_ds = ogr.Open(ref_data_filepath)
-            v_rasterized_filename =  update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
+            v_rasterized_path =  update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
                                                      new_root=out_dirpath)
-            v_reprojected_filename = update_filepath(ref_data_filepath, add_str=reproj_add_str, new_root=out_dirpath)
-            v_rasterized_path = os.path.join(out_dirpath, v_rasterized_filename)
-            v_reprojected_path = os.path.join(out_dirpath, v_reprojected_filename)
+            v_reprojected_path = update_filepath(ref_data_filepath, add_str=reproj_add_str, new_root=out_dirpath)
             self.ref_data = rasterize(vec_ds, v_rasterized_path, self.input_data, self.gt, self.sref,
                                       v_reprojected_filepath=v_reprojected_path)
 
@@ -177,8 +175,9 @@ class Validation:
         mask_ext = os.path.splitext(os.path.basename(mask_path))[1]
         if mask_ext == '.shp':
             vec_ds = ogr.Open(mask_path)
-            v_rasterized_path = os.path.join(self.out_dirpath, 'mask_rasterized.tif')
-            v_reprojected_path = os.path.join(self.out_dirpath, 'mask_vec_reproj.shp')
+            v_rasterized_path = update_filepath(mask_path, add_str=self.reproj_add_str, new_ext='tif',
+                                                new_root=self.out_dirpath)
+            v_reprojected_path = update_filepath(mask_path, add_str=self.reproj_add_str, new_root=self.out_dirpath)
             ex_mask = rasterize(vec_ds, v_rasterized_path, self.input_data, self.gt, self.sref,
                                 v_reprojected_filepath=v_reprojected_path)
         elif mask_ext == '.tif':
@@ -200,7 +199,8 @@ class Validation:
             raise ValueError("Input file with extension " + mask_ext + " is not supported.")
 
         # apply mask
-        self.confusion_map[ex_mask == 1] = 255
+        if self.confusion_map is not None:
+            self.confusion_map[ex_mask == 1] = 255
         self.input_data[ex_mask == 1] = 255
 
     def calculate_accuracy_metric(self, metric_func):
@@ -240,9 +240,9 @@ class Validation:
         """
 
         valid = np.logical_and(self.ref_data != 255, self.input_data != 255)
-        with GeoTiffFile(valid_filepath, mode='w', geotrans=self.gt, sref_wkt=self.sref, nodatavals=[255],
+        with GeoTiffFile(valid_filepath, mode='w', geotrans=self.gt, sref_wkt=self.sref, nodatavals=255,
                          overwrite=True) as src:
-            src.write(valid)
+            src.write(np.expand_dims(valid, axis=0))
 
     def write_confusion_map(self, out_filepath):
         """
@@ -254,9 +254,9 @@ class Validation:
             Path of the output file.
         """
 
-        with GeoTiffFile(out_filepath, mode='w', geotrans=self.gt, sref_wkt=self.sref, nodatavals=[255],
+        with GeoTiffFile(out_filepath, mode='w', geotrans=self.gt, sref_wkt=self.sref, nodatavals=255,
                          overwrite=True) as src:
-            src.write(self.confusion_map)
+            src.write(np.expand_dims(self.confusion_map, axis=0))
 
 
 def delete_shapefile(shp_path):
@@ -307,7 +307,7 @@ def run(ras_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, sample
     df: Pandas dataframe
         Dataframe containing the resulting validation measures. df is printed and written to csv TODO: fix output logic
     """
-
+    # TODO: fix run function
     ref_data_filepath_current = ref_data_filepath  # temporary place holder
     delete_tmp_files_current = False  # by default retain temporary files to reuse for subsequent runs
     num_inputs = len(ras_data_filepaths)
