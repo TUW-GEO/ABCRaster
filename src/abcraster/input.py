@@ -1,9 +1,11 @@
+from veranda.raster.mosaic.geotiff import GeoTiffFile
+from geospade.raster import RasterGeometry
 from osgeo import gdal, ogr, osr
 import numpy as np
 import os
 
 
-def reproject_vec(layer, out_sref, v_reprojected_filepath='tmp.shp'):
+def vec_reproject(layer, out_sref, v_reprojected_filepath='tmp.shp'):
     """
     Reprojects a vector layer to a different projection.
 
@@ -67,6 +69,91 @@ def reproject_vec(layer, out_sref, v_reprojected_filepath='tmp.shp'):
     outLayer = None
 
 
+def raster_reproject(ds1, ds2, out_dirpath, reproj_add_str):
+    """
+    Reprojects first raster dataset to the spatial reference of the second raster dataset.
+
+    Parameters
+    ----------
+    ds1: GeoTiffFile
+        GeoTiffFile object from veranda, which will be reprojected.
+    ds2: GeoTiffFile
+        GeoTiffFile object from veranda, which will be used as example dataset.
+    out_dirpath: str
+        Directory to which the output will be written to.
+    reproj_add_str: str
+        String which will be added to the filename of vector or raster files after reprojecting.
+
+    Returns
+    -------
+    out_reproj_path: str
+        Path of the reprojected raster file.
+    """
+
+    out_reproj_path = update_filepath(ds1.filepath, add_str=reproj_add_str, new_root=out_dirpath)
+
+    warp = gdal.Warp(out_reproj_path, ds1.filepath, dstSRS=ds2.sref_wkt)
+    warp = None  # Closes the files
+
+    return out_reproj_path
+
+
+def raster_intersect(ds1, ds2):
+    """
+    Retrieves the intersecting geometry from two raster datasets.
+
+    Parameters
+    ----------
+    ds1: GeoTiffFile
+        GeoTiffFile object from veranda.
+    ds2: GeoTiffFile
+        GeoTiffFile object from veranda.
+
+    Returns
+    -------
+    intersection: RasterGeometry
+        Geometry of the intersection.
+    """
+
+    ras1 = RasterGeometry(n_rows=ds1.raster_shape[0], n_cols=ds1.raster_shape[1], sref=ds1.sref_wkt,
+                          geotrans=ds1.geotrans)
+    ras2 = RasterGeometry(n_rows=ds2.raster_shape[0], n_cols=ds2.raster_shape[1], sref=ds2.sref_wkt,
+                          geotrans=ds2.geotrans)
+
+    if not ras1.intersects(ras2):
+        raise ValueError("Input data does not intersect reference data.")
+
+    intersection = ras1.slice_by_geom(ras2, sref=ds2.sref_wkt)
+    intersection = intersection.slice_by_geom(ras1, sref=ds1.sref_wkt)
+
+    return intersection
+
+
+def raster_read_from_polygon(fpath, geom):
+    """
+    Reads the area defined by the passed polygon from a raster file.
+
+    Parameters
+    ----------
+    fpath: str
+        Path of the input raster files.
+    geom: RasterGeometry
+        Polygon to read from the raster file.
+
+    Returns
+    -------
+    arr: np.ndarray
+        Resulting numpy array.
+    """
+
+    raster_data = GeoTiffFile.from_filepaths(fpath)
+    raster_data.select_polygon(geom.boundary, sref=geom.sref_wkt, inplace=True)
+    arr = raster_data.read()[1]
+    raster_data.close()
+
+    return arr
+
+
 def rasterize(vec_ds, out_ras_path, ras_data, gt, sref, v_reprojected_filepath='tmp.shp', bg_absence=True):
     """
     Transforms a vector to a raster layer.
@@ -108,7 +195,7 @@ def rasterize(vec_ds, out_ras_path, ras_data, gt, sref, v_reprojected_filepath='
 
     if in_sref != out_sref:
         print('reprojecting...')
-        reproject_vec(vec_layer, out_sref, v_reprojected_filepath)
+        vec_reproject(vec_layer, out_sref, v_reprojected_filepath)
         print('done... reprojecting')
 
         # returning layer object and using that to rasterize results it segmentation fault.
@@ -152,3 +239,34 @@ def bounding_box2offsets(bbox, geot):
     row1 = int((bbox[3] - geot[3]) / geot[5])
     row2 = int((bbox[2] - geot[3]) / geot[5]) + 1
     return [row1, row2, col1, col2]
+
+
+def update_filepath(fpath, add_str=None, new_ext=None, new_root=None):
+    """
+    Updates the filename in a given path by adding a string at the end and optionally update the file extension.
+
+    Parameters
+    ----------
+    fpath: str
+        Input file path.
+    add_str: str, optional
+        String to be added to the filename (default: None).
+    new_ext: str, optional
+        New file extension (default: None).
+    new_root: str, optional
+        New directory for the file (default: None).
+
+    Returns
+    -------
+    updated_filepath: str
+        Updated file path.
+    """
+
+    orig_dirpath, orig_fname = os.path.split(fpath)
+    orig_name, orig_ext = os.path.splitext(orig_fname)
+
+    add_str = '' if add_str is None else '_' + add_str
+    ext = new_ext if new_ext is not None else orig_ext
+    dir_path = new_root if new_root is not None else orig_dirpath
+
+    return os.path.join(dir_path, orig_name + add_str + '.' + ext)

@@ -4,7 +4,7 @@ from osgeo import ogr
 import numpy as np
 import pandas as pd
 from veranda.raster.native.geotiff import GeoTiffFile
-from abcraster.input import rasterize
+from abcraster.input import rasterize, raster_reproject, raster_intersect, raster_read_from_polygon, update_filepath
 from abcraster.sampling import gen_random_sample
 from abcraster.metrics import metrics
 
@@ -12,8 +12,8 @@ from abcraster.metrics import metrics
 class Validation:
     """Class to perform a validation of binary classification results."""
 
-    def __init__(self, ras_data_filepath, ref_data_filepath, out_dirpath, v_reprojected_filename='reproj_tmp.shp',
-                 v_rasterized_filename='rasterized_ref.tif', delete_tmp_files=False, ras_data_nodata=255,
+    def __init__(self, ras_data_filepath, ref_data_filepath, out_dirpath, reproj_add_str='reproj',
+                 rasterized_add_str='rasterized', delete_tmp_files=False, ras_data_nodata=255,
                  ref_data_nodata=255):
         """
         Loads and harmonizes the classification resultan d reference data.
@@ -26,10 +26,10 @@ class Validation:
             Path of reference data.
         out_dirpath: str
             Path of the output directory.
-        v_reprojected_filename: str, optional
-            Output path of the reprojected vector layer file (default: 'reproj_tmp.shp').
-        v_rasterized_filename: str, optional
-            Output path of the rasterized reference data (default: 'rasterized_val.tif').
+        reproj_add_str: str, optional
+            String which will be added to the filename of vector or raster files after reprojecting (default: 'reproj').
+        rasterized_add_str: str, optional
+            String which is added to the filename of a vector file after being rasterized (default: 'rasterized').
         delete_tmp_files: bool, optional
             Option to delete all temporary files (default: False).
         ras_data_nodata: int, optional
@@ -38,16 +38,20 @@ class Validation:
             No data value of the reference data (default: 255).
         """
 
-        # load classification result
-        with GeoTiffFile(ras_data_filepath) as src:
-            self.input_data = src.read()[1]
-            self.gt = src.geotrans
-            self.sref = src.sref_wkt
-
-        # handle reference data input
         ref_file_ext = os.path.splitext(os.path.basename(ref_data_filepath))[1]
+
         if ref_file_ext == '.shp':
+            # load classification result
+            with GeoTiffFile(ras_data_filepath) as input_ds:
+                self.input_data = input_ds.read()[1]
+                self.gt = input_ds.geotrans
+                self.sref = input_ds.sref_wkt
+
+            # rasterize vector-based reference data
             vec_ds = ogr.Open(ref_data_filepath)
+            v_rasterized_filename =  update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
+                                                     new_root=out_dirpath)
+            v_reprojected_filename = update_filepath(ref_data_filepath, add_str=reproj_add_str, new_root=out_dirpath)
             v_rasterized_path = os.path.join(out_dirpath, v_rasterized_filename)
             v_reprojected_path = os.path.join(out_dirpath, v_reprojected_filename)
             self.ref_data = rasterize(vec_ds, v_rasterized_path, self.input_data, self.gt, self.sref,
@@ -57,15 +61,40 @@ class Validation:
             if delete_tmp_files:
                 os.remove(v_rasterized_path)
                 delete_shapefile(v_reprojected_path)
-        elif ref_file_ext == '.tif':
-            with GeoTiffFile(ref_data_filepath) as src:
-                self.ref_data = src.read()[1]
-                ref_gt = src.geotrans
-                ref_sref = src.sref_wkt
 
-                if ref_gt != self.gt or ref_sref != self.sref:
-                    print("WARNING: Grid/projection of input and reference data are not the same!")
-                    # TODO: transform reference data to match CRS of input data
+        elif ref_file_ext == '.tif':
+            # calculate details of harmonized raster datasets
+            with GeoTiffFile(ras_data_filepath) as input_ds, GeoTiffFile(ref_data_filepath) as ref_ds:
+                input_gt = input_ds.geotrans
+                input_sref = input_ds.sref_wkt
+                ref_gt = ref_ds.geotrans
+                ref_sref = ref_ds.sref_wkt
+
+                if ref_sref != input_sref:
+                    ref_reproj_path = raster_reproject(ref_ds, input_ds, out_dirpath, reproj_add_str)
+                else:
+                    ref_reproj_path = None
+
+                if ref_gt != input_gt:
+                    intersect_geom = raster_intersect(input_ds, ref_ds)
+                else:
+                    intersect_geom = None
+
+            # read input and reference data
+            if ref_reproj_path is not None:
+                ref_data_filepath = ref_reproj_path
+
+            if intersect_geom is None:
+                self.input_data = input_ds.read()[1]
+                self.gt = input_ds.geotrans
+                self.sref = input_ds.sref_wkt
+                self.ref_data = ref_ds.read()[1]
+            else:  # geocoding needs to be adapted
+                self.input_data = raster_read_from_polygon(ras_data_filepath, intersect_geom)
+                self.gt = intersect_geom.geotrans
+                self.sref = intersect_geom.sref_wkt
+                self.ref_data = raster_read_from_polygon(ref_data_filepath, intersect_geom)
+
         else:
             raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
 
