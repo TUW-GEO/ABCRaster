@@ -33,11 +33,27 @@ In order to finish the setup of the GDAL environment, the following environment 
 ### Self-defined workflow
 The `abcraster.base` module provides the `Validation` class, which carries the main functionality as 
 dedicated methods. One can build a self-defined validation workflow by importing the class and calling
-the needed methods.
+the needed methods. An example of a self-defined workflow is given here:
+    
+    # initialize validation object
+    val = Validation(input_data_filepath=input_path, ref_data_filepath=ref_path, out_dirpath=out_dirpath)
+
+    val.apply_mask(aoi_path, invert_mask=True)  # apply an area-of-interest (.tif or .shp)
+    val.apply_maks(mask_path)  # apply a general mask (.tif or .shp)
+    val.accuracy_assessment()  # calculate confusion matrix/map
+    val.write_confusion_map(os.path.join(out_dirpath, 'val_diff.tif'))  # write confusion map to file
+    print(val.calculate_accuracy_metric(critical_success_index))  # print the CSI value
+
+The `calculate_accuracy_metric` method takes in all predefined functions of the `abcraster.metrics` module, 
+but allows for self-written function as well. The function will receive a dictionary representing the confusion
+matrix and cotnaining the values for the keys: 'TP', 'TN', 'FP' and 'FN'.
 
 ### Scripting
 An already pre-defined workflow can be utilized in a Python script when using the `run` function of the 
-`abcraster.base` module.
+`abcraster.base` module. An example of a call of the `run` function is given here:
+
+    run(input_data_filepaths=[input_path], ref_data_filepath=ref_path, out_dirpath=out_dirpath, metrics_list=['CSI', 'OA'],
+        samples_filepath=os.path.join(out_dirpath, 'sampling.tif'), sampling=(200, 200))
 
 ### Command line
 
