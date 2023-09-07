@@ -1,7 +1,10 @@
 from veranda.raster.mosaic.geotiff import GeoTiffFile
 from geospade.raster import RasterGeometry
 from osgeo import gdal, ogr, osr
+from rasterio import features
+import geopandas as gpd
 import numpy as np
+import rasterio
 import os
 
 
@@ -149,82 +152,56 @@ def raster_read_from_polygon(fpath, geom):
     return arr
 
 
-def rasterize(vec_ds, out_ras_path, ras_data, gt, sref, v_reprojected_filepath='tmp.shp', bg_absence=True):
+def rasterize(vec_path, out_ras_path, ras_path):
     """
     Transforms a vector to a raster layer.
 
     Parameters
     ----------
-    vec_ds: ogr vector layer
-        Vector layer to be rasterized.
+    vec_path: str
+        Path of the vector layer to be rasterized.
     out_ras_path: str
         Path of the output raster layer.
-    ras_data: numpy.array
-        Exemplary raster array.
-    gt: tuple
-        GDAL geotransform definition of output raster.
-    sref: osr.SpatialReference
-        Spatial projection of the output raster layer.
-    v_reprojected_filepath: str
-        Path of the temporary reprojected vector layer.
-    bg_absence: bool, optional
-        Option to limit comparison to the vector layer extent (default: True).
+    ras_path: str
+        Path of exemplary raster array.
 
     Returns
     -------
-    out_ras_data: numpy.array
+    rasterized: numpy.array
         Resulting raster array.
     """
 
-    rasterYSize, rasterXSize = ras_data.shape
-    gtiff_driver = gdal.GetDriverByName("GTiff")
-    out_ds = gtiff_driver.Create(out_ras_path, rasterXSize, rasterYSize, 1, gdal.GDT_Byte)
-    out_ds.SetGeoTransform(gt)
-    out_ds.SetProjection(sref)
-    vec_layer = vec_ds.GetLayer()
+    # Open example raster
+    raster = rasterio.open(ras_path)
 
-    out_sref = osr.SpatialReference()
-    out_sref.ImportFromWkt(sref)
+    # Read and transform vector layer
+    vector = gpd.read_file(vec_path)
+    vector = vector.to_crs(raster.crs)
+    geom = [shapes for shapes in vector.geometry]
 
-    in_sref = vec_layer.GetSpatialRef()
+    # Rasterize vector using the shape and coordinate system of the raster
+    rasterized = features.rasterize(geom,
+                                    out_shape=raster.shape,
+                                    fill=0,
+                                    out=None,
+                                    transform=raster.transform,
+                                    all_touched=False,
+                                    default_value=1,
+                                    dtype = None)
 
-    if in_sref != out_sref:
-        print('reprojecting...')
-        vec_reproject(vec_layer, out_sref, v_reprojected_filepath)
-        print('done... reprojecting')
+    # write output
+    with rasterio.open(
+        out_ras_path, "w",
+        driver="GTiff",
+        crs=raster.crs,
+        transform=raster.transform,
+        dtype=rasterio.uint8,
+        count=1,
+        width=raster.width,
+        height=raster.height) as dst:
+            dst.write(rasterized, indexes=1)
 
-        # returning layer object and using that to rasterize results it segmentation fault.
-        driver = ogr.GetDriverByName('ESRI Shapefile')
-        reProjDataSet = driver.Open(v_reprojected_filepath)
-        vec_layer = reProjDataSet.GetLayer()
-
-    # burn polygons as presence,
-    # TODO: add attribute filtering for presence and absence
-    # TODO: add elif to get attribute.
-    gdal.RasterizeLayer(out_ds, [1], vec_layer, burn_values=[1])
-    outBand = out_ds.GetRasterBand(1)
-    outBand.SetNoDataValue(255)
-    out_ras_data = outBand.ReadAsArray()
-
-    output = np.empty_like(out_ras_data, dtype=np.uint8)
-    maxRow, maxCol = output.shape
-    output[:] = 255  # default nodata
-    if bg_absence:
-        v_ext = vec_layer.GetExtent()
-        row_start, row_end, col_start, col_end = bounding_box2offsets(v_ext, gt)
-        # overflow check
-        row_end = min([maxRow - 1, row_end])
-        col_end = min([maxCol - 1, col_end])
-        row_start = max([0, row_start])
-        col_start = max([0, col_start])
-        output[row_start:row_end, col_start:col_end] = 0
-    output[out_ras_data == 1] = 1
-    outBand.WriteArray(output)
-    out_ras_data = output
-
-    outBand = None
-    out_ds = None
-    return out_ras_data
+    return rasterized
 
 
 def bounding_box2offsets(bbox, geot):

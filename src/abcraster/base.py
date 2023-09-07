@@ -13,7 +13,7 @@ from abcraster.metrics import metrics
 class Validation:
     """Class to perform a validation of binary classification results."""
 
-    def __init__(self, ras_data_filepath, ref_data_filepath, out_dirpath, reproj_add_str='reproj',
+    def __init__(self, input_data_filepath, ref_data_filepath, out_dirpath, reproj_add_str='reproj',
                  rasterized_add_str='rasterized', delete_tmp_files=False, ras_data_nodata=255,
                  ref_data_nodata=255):
         """
@@ -21,7 +21,7 @@ class Validation:
 
         Parameters
         ----------
-        ras_data_filepath: str
+        input_data_filepath: str
             Path of binary classified raster tiff file.
         ref_data_filepath: str
             Path of reference data.
@@ -43,27 +43,24 @@ class Validation:
 
         if ref_file_ext == '.shp':
             # load classification result
-            with GeoTiffFile(ras_data_filepath) as input_ds:
+            with GeoTiffFile(input_data_filepath) as input_ds:
                 self.input_data = input_ds.read()[1]
                 self.gt = input_ds.geotrans
                 self.sref = input_ds.sref_wkt
 
             # rasterize vector-based reference data
-            vec_ds = ogr.Open(ref_data_filepath)
             v_rasterized_path =  update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
                                                      new_root=out_dirpath)
-            v_reprojected_path = update_filepath(ref_data_filepath, add_str=reproj_add_str, new_root=out_dirpath)
-            self.ref_data = rasterize(vec_ds, v_rasterized_path, self.input_data, self.gt, self.sref,
-                                      v_reprojected_filepath=v_reprojected_path)
+            self.ref_data = rasterize(vec_path=ref_data_filepath, out_ras_path=v_rasterized_path,
+                                      ras_path=input_data_filepath)
 
             # delete temporary files if requested
             if delete_tmp_files:
                 os.remove(v_rasterized_path)
-                delete_shapefile(v_reprojected_path)
 
         elif ref_file_ext == '.tif':
             # calculate details of harmonized raster datasets
-            with GeoTiffFile(ras_data_filepath) as input_ds, GeoTiffFile(ref_data_filepath) as ref_ds:
+            with GeoTiffFile(input_data_filepath) as input_ds, GeoTiffFile(ref_data_filepath) as ref_ds:
                 input_gt = input_ds.geotrans
                 input_sref = input_ds.sref_wkt
                 ref_gt = ref_ds.geotrans
@@ -88,7 +85,7 @@ class Validation:
                 self.sref = input_ds.sref_wkt
                 self.ref_data = ref_ds.read()[1]
             else:  # geocoding needs to be adapted
-                self.input_data = raster_read_from_polygon(ras_data_filepath, intersect_geom)
+                self.input_data = raster_read_from_polygon(input_data_filepath, intersect_geom)
                 self.gt = intersect_geom.geotrans
                 self.sref = intersect_geom.sref_wkt
                 self.ref_data = raster_read_from_polygon(ref_data_filepath, intersect_geom)
@@ -97,6 +94,7 @@ class Validation:
             raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
 
         # define further attributes
+        self.input_path = input_data_filepath
         self.samples = None
         self.confusion_matrix = None
         self.confusion_map = None
@@ -161,7 +159,7 @@ class Validation:
         with GeoTiffFile(samples_filepath) as src:
             self.samples = src.read()[1]
 
-    def apply_mask(self, mask_path):
+    def apply_mask(self, mask_path, invert_mask=False):
         """
         Apply a raster or vector mask to the input data.
 
@@ -169,17 +167,16 @@ class Validation:
         ----------
         mask_path: str
             Path of the mask to be applied.
+        invert_mask: bool, optional
+            Option to invert the passed mask (default: False).
         """
 
         # load mask layer
         mask_ext = os.path.splitext(os.path.basename(mask_path))[1]
         if mask_ext == '.shp':
-            vec_ds = ogr.Open(mask_path)
-            v_rasterized_path = update_filepath(mask_path, add_str=self.reproj_add_str, new_ext='tif',
+            v_rasterized_path = update_filepath(mask_path, add_str=self.rasterized_add_str, new_ext='tif',
                                                 new_root=self.out_dirpath)
-            v_reprojected_path = update_filepath(mask_path, add_str=self.reproj_add_str, new_root=self.out_dirpath)
-            ex_mask = rasterize(vec_ds, v_rasterized_path, self.input_data, self.gt, self.sref,
-                                v_reprojected_filepath=v_reprojected_path)
+            ex_mask = rasterize(vec_path=mask_path, out_ras_path=v_rasterized_path, ras_path=self.input_path)
         elif mask_ext == '.tif':
             with GeoTiffFile(mask_path) as mask_ds:
                 mask_gt = mask_ds.geotrans
@@ -199,9 +196,13 @@ class Validation:
             raise ValueError("Input file with extension " + mask_ext + " is not supported.")
 
         # apply mask
+        if invert_mask:
+            ex_mask = ex_mask != 1
+        else:
+            ex_mask = ex_mask == 1
         if self.confusion_map is not None:
-            self.confusion_map[ex_mask == 1] = 255
-        self.input_data[ex_mask == 1] = 255
+            self.confusion_map[ex_mask] = 255
+        self.input_data[ex_mask] = 255
 
     def calculate_accuracy_metric(self, metric_func):
         """
