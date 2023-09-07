@@ -1,4 +1,4 @@
-from veranda.raster.mosaic.geotiff import GeoTiffFile
+from veranda.raster.mosaic.geotiff import GeoTiffReader
 from geospade.raster import RasterGeometry
 from osgeo import gdal, ogr, osr
 from rasterio import features
@@ -72,7 +72,7 @@ def vec_reproject(layer, out_sref, v_reprojected_filepath='tmp.shp'):
     outLayer = None
 
 
-def raster_reproject(fpath, sref, out_dirpath, reproj_add_str):
+def raster_reproject(fpath, sref, res, out_dirpath, reproj_add_str):
     """
     Reprojects first raster dataset to the spatial reference of the second raster dataset.
 
@@ -82,6 +82,8 @@ def raster_reproject(fpath, sref, out_dirpath, reproj_add_str):
         Raster file path to be reprojected.
     sref: str
         Aimed spatial reference as WKT.
+    res: int
+        Aimed spatial resolution.
     out_dirpath: str
         Directory to which the output will be written to.
     reproj_add_str: str
@@ -95,7 +97,7 @@ def raster_reproject(fpath, sref, out_dirpath, reproj_add_str):
 
     out_reproj_path = update_filepath(fpath, add_str=reproj_add_str, new_root=out_dirpath)
 
-    warp = gdal.Warp(out_reproj_path, fpath, dstSRS=sref)
+    warp = gdal.Warp(out_reproj_path, fpath, dstSRS=sref, resampleAlg='near', xRes=res, yRes=res)
     warp = None  # Closes the files
 
     return out_reproj_path
@@ -144,12 +146,12 @@ def raster_read_from_polygon(fpath, geom):
         Resulting numpy array.
     """
 
-    raster_data = GeoTiffFile.from_filepaths(fpath)
-    raster_data.select_polygon(geom.boundary, sref=geom.sref_wkt, inplace=True)
-    arr = raster_data.read()[1]
+    raster_data = GeoTiffReader.from_filepaths([fpath])
+    raster_data.select_polygon(geom.boundary, sref=geom.sref, inplace=True)
+    raster_data.read()
     raster_data.close()
 
-    return arr
+    return raster_data.data_view.to_array().to_numpy()[0, 0, ...]
 
 
 def rasterize(vec_path, out_ras_path, ras_path):

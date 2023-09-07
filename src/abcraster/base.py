@@ -4,6 +4,7 @@ from osgeo import ogr
 import numpy as np
 import pandas as pd
 from geospade.raster import RasterGeometry
+from geospade.crs import SpatialRef
 from veranda.raster.native.geotiff import GeoTiffFile
 from abcraster.input import rasterize, raster_reproject, raster_intersect, raster_read_from_polygon, update_filepath
 from abcraster.sampling import gen_random_sample
@@ -67,14 +68,16 @@ class Validation:
                 ref_sref = ref_ds.sref_wkt
 
                 if ref_sref != input_sref:
-                    ref_data_filepath = raster_reproject(ref_ds.filepath, input_ds.sref_wkt, out_dirpath,
-                                                         reproj_add_str)
+                    ref_data_filepath = raster_reproject(ref_ds.filepath, input_ds.sref_wkt, int(input_ds.geotrans[1]),
+                                                         out_dirpath, reproj_add_str)
 
                 if ref_gt != input_gt:
                     input_geom = RasterGeometry(n_rows=input_ds.raster_shape[0], n_cols=input_ds.raster_shape[1],
-                                                sref=input_ds.sref_wkt, geotrans=input_ds.geotrans)
+                                                sref=SpatialRef(input_ds.sref_wkt, sref_type='wkt'),
+                                                geotrans=input_ds.geotrans)
                     ref_geom = RasterGeometry(n_rows=ref_ds.raster_shape[0], n_cols=ref_ds.raster_shape[1],
-                                              sref=ref_ds.sref_wkt, geotrans=ref_ds.geotrans)
+                                              sref=SpatialRef(ref_ds.sref_wkt, sref_type='wkt'),
+                                              geotrans=ref_ds.geotrans)
                     intersect_geom = raster_intersect(input_geom, ref_geom)
                 else:
                     intersect_geom = None
@@ -87,7 +90,7 @@ class Validation:
             else:  # geocoding needs to be adapted
                 self.input_data = raster_read_from_polygon(input_data_filepath, intersect_geom)
                 self.gt = intersect_geom.geotrans
-                self.sref = intersect_geom.sref_wkt
+                self.sref = intersect_geom.sref.wkt
                 self.ref_data = raster_read_from_polygon(ref_data_filepath, intersect_geom)
 
         else:
@@ -187,7 +190,7 @@ class Validation:
 
                 if self.gt != mask_gt:
                     geom = RasterGeometry(n_rows=self.input_data.shape[0], n_cols=self.input_data.shape[1],
-                                          sref=self.sref, geotrans=self.gt)
+                                          sref=SpatialRef(self.sref, sref_type='wkt'), geotrans=self.gt)
                     ex_mask = raster_read_from_polygon(mask_path, geom)
                 else:
                     ex_mask = mask_ds.read()[1]
