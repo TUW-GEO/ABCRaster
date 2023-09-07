@@ -50,7 +50,7 @@ class Validation:
 
             # rasterize vector-based reference data
             v_rasterized_path =  update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
-                                                     new_root=out_dirpath)
+                                                 new_root=out_dirpath)
             self.ref_data = rasterize(vec_path=ref_data_filepath, out_ras_path=v_rasterized_path,
                                       ras_path=input_data_filepath)
 
@@ -149,9 +149,9 @@ class Validation:
 
         # write output
         if samples_filepath is not None:
-            with GeoTiffFile(samples_filepath, mode='w', geotrans=self.gt, sref_wkt=self.sref, nodatavals=[255],
+            with GeoTiffFile(samples_filepath, mode='w', geotrans=self.gt, sref_wkt=self.sref, nodatavals=255,
                              overwrite=True) as src:
-                src.write(self.samples)
+                src.write(np.expand_dims(self.samples, axis=0))
 
     def load_sampling(self, samples_filepath):
         """Loads the samples from a raster file."""
@@ -267,16 +267,15 @@ def delete_shapefile(shp_path):
         driver.DeleteDataSource(shp_path)
 
 
-def run(ras_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samples_filepath=None, sampling=None,
-        diff_ras_out_filename='val.tif', v_reprojected_filename='reproj_tmp.shp',
-        v_rasterized_filename='rasterized_ref.tif', out_csv_filename='val.csv', ex_filepath=None,
-        delete_tmp_files=False):
+def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samples_filepath=None, sampling=None,
+        diff_ras_out_filename='val.tif', reproj_add_str='reproj', rasterized_add_str='rasterized',
+        out_csv_filename='val.csv', ex_filepath=None, delete_tmp_files=False):
     """
     Runs a validation workflow.
 
     Parameters
     ----------
-    ras_data_filepaths: list, str
+    input_data_filepaths: list, str
         Paths of binary classified raster tiff files.
     ref_data_filepath: str
         Path of reference data.
@@ -293,10 +292,10 @@ def run(ras_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, sample
         *sampling is superseded if samples_filepath is None
     diff_ras_out_filename: str, optional
         Output path of the difference layer file (default: 'val.tif').
-    v_reprojected_filename: str, optional
-        Output path of the reprojected vector layer file (default: 'reproj_tmp.shp').
-    v_rasterized_filename: str, optional
-        Output path of the rasterized reference data (default: 'rasterized_val.tif').
+    reproj_add_str: str, optional
+            String which will be added to the filename of vector or raster files after reprojecting (default: 'reproj').
+    rasterized_add_str: str, optional
+        String which is added to the filename of a vector file after being rasterized (default: 'rasterized').
     out_csv_filename: str, optional
         Output path of the validation measures as csv file. If set to None, no csv file is written (default: 'val.csv').
     ex_filepath: str, optional
@@ -308,10 +307,10 @@ def run(ras_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, sample
     df: Pandas dataframe
         Dataframe containing the resulting validation measures. df is printed and written to csv TODO: fix output logic
     """
-    # TODO: fix run function
+
     ref_data_filepath_current = ref_data_filepath  # temporary place holder
     delete_tmp_files_current = False  # by default retain temporary files to reuse for subsequent runs
-    num_inputs = len(ras_data_filepaths)
+    num_inputs = len(input_data_filepaths)
 
     results = []
     cols = ['input file', 'reference file']
@@ -321,14 +320,15 @@ def run(ras_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, sample
         cols += [metric.__doc__]
 
     for i in range(num_inputs):
-        ras_data_filepath = ras_data_filepaths[i]
+        input_data_filepath = input_data_filepaths[i]
 
-        input_base_filename = os.path.basename(ras_data_filepath)
+        input_base_filename = os.path.basename(input_data_filepath)
         ref_base_filename = os.path.basename(ref_data_filepath)
 
         # initialize validation object
-        v = Validation(ras_data_filepath, ref_data_filepath_current, out_dirpath, v_reprojected_filename,
-                       v_rasterized_filename, delete_tmp_files_current, ref_data_nodata=255)
+        v = Validation(input_data_filepath, ref_data_filepath=ref_data_filepath_current, out_dirpath=out_dirpath,
+                       reproj_add_str=reproj_add_str, rasterized_add_str=rasterized_add_str,
+                       delete_tmp_files=delete_tmp_files_current, ref_data_nodata=255)
 
         # apply exclusion mask
         if ex_filepath is not None:
@@ -362,13 +362,15 @@ def run(ras_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, sample
 
         ref_file_ext = os.path.splitext(os.path.basename(ref_data_filepath))[1]
         if ref_file_ext == '.shp':
-            v_rasterized_path = os.path.join(out_dirpath, v_rasterized_filename)
+            v_rasterized_path = update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
+                                                new_root=out_dirpath)
             ref_data_filepath_current = v_rasterized_path  # use the temporary rasterized reference
 
         if i == num_inputs - 1:  # if last run use delete flag from cli
             if delete_tmp_files:
-                os.remove(os.path.join(out_dirpath, v_rasterized_filename))
-                delete_shapefile(os.path.join(out_dirpath, v_reprojected_filename))
+                v_rasterized_path = update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
+                                                    new_root=out_dirpath)
+                os.remove(v_rasterized_path)
 
     if num_inputs == 1:  # changed output format for multiple results
         df = pd.DataFrame(results[0], cols)
@@ -462,19 +464,14 @@ def command_line_interface():
 
     # define output names
     out_dirpath, out_raster_filename = os.path.split(output_raster_filepath)
-    base = os.path.splitext(out_raster_filename)[0]
-    reproj_shp_filepath = base + '_reproj_input_vector.shp'
-    rasterized_shp_filepath = base + '_rasterize_input_vector.tif'
 
     # set default option
     if delete_tmp is None:
         delete_tmp = False
 
-    run(ras_data_filepaths=input_raster_filepaths, ref_data_filepath=validation_filepath, out_dirpath=out_dirpath,
-        diff_ras_out_filename=out_raster_filename, v_reprojected_filename=reproj_shp_filepath,
-        v_rasterized_filename=rasterized_shp_filepath, out_csv_filename=output_csv_filepath,
-        ex_filepath=exclusion_filepath, delete_tmp_files=delete_tmp,
-        sampling=sampling, samples_filepath=samples_filepath, metrics_list=metrics_list)
+    run(input_data_filepaths=input_raster_filepaths, ref_data_filepath=validation_filepath, out_dirpath=out_dirpath,
+        diff_ras_out_filename=out_raster_filename, out_csv_filename=output_csv_filepath, ex_filepath=exclusion_filepath,
+        delete_tmp_files=delete_tmp, sampling=sampling, samples_filepath=samples_filepath, metrics_list=metrics_list)
 
 
 if __name__ == '__main__':

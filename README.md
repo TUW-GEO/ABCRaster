@@ -1,10 +1,81 @@
 # ABCRaster
-ABCRaster stands for Accuracy assessment of Binary Classified Raster. It is a package for performing validation, accuracy assessment, or comparing flood map (*.tiff) results versus a reference (*.shp, *.tif) e.g. [CEMS](https://emergency.copernicus.eu/emsdata.html). Can be used to assess other binary classification (presence/absence) maps. Computes accuracy assessment metrics e.g. User, Producer’s accuracy, Kappa, etc. Also creates ‘confusion map’ with pixels marked as TP, TN, FP, and FN.
+ABCRaster stands for Accuracy assessment of Binary Classified Raster. It is a package for performing validation, 
+accuracy assessment, or comparing classification results (.tif) versus a reference (.shp, .tif) e.g. 
+[CEMS](https://emergency.copernicus.eu/emsdata.html). Can be used to assess other binary classification 
+(presence/absence) maps. Computes accuracy assessment metrics e.g. User, Producer’s accuracy, Kappa, etc. Also creates 
+‘confusion map’ with pixels marked as TP, TN, FP, and FN.
 
 * reference shapefile can be in any projection (built-in reprojection and rasterization)
 * (stratified) random sampling support (*based on reference file)
-* creates CSV output
+* applying raster or vector masks
 * creates confusion (difference) tiff file 
+
+## Installation
+First, a conda environment containing GDAL needs to be created:
+
+    conda create -n "abcraster" -c conda-forge python=3.8 mamba
+    conda activate abcraster
+    mamba install -c conda-forge python=3.8 gdal geopandas cartopy
+    
+The package itself can be installed by pip (from source or a repository):
+    
+    pip install abcraster
+
+In order to finish the setup of the GDAL environment, the following environment variables need to set:
+
+    export PROJ_LIB="[...]/miniconda/envs/abcraster/share/proj"
+    export GDAL_DATA="[...]/miniconda/envs/abcraster/share/gdal"
+
+** to get the path your conda envirment you can use `echo $CONDA_PREFIX` on Linux or  `echo %CONDA_PREFIX%` on Windows
+
+## Usage
+
+### Self-defined workflow
+The `abcraster.base` module provides the `Validation` class, which carries the main functionality as 
+dedicated methods. One can build a self-defined validation workflow by importing the class and calling
+the needed methods.
+
+### Scripting
+An already pre-defined workflow can be utilized in a Python script when using the `run` function of the 
+`abcraster.base` module.
+
+### Command line
+
+The same pre-defined worklfow can be called through the command line by:
+
+    python -m abcraster.base
+    
+Furhter details can be defined using the following arguments:
+
+`-in` or `--input_filepath` -- Full file path to the binary raster data 1= presence, 0=absennce, for now 255=nodata.
+
+`-ex` or `--exclusion_filepath` -- Full file path to the binary exclusion data 1=exclude, 
+for now 255=nodata
+
+`-ref` or `--reference_file` -- Full file path to the validation shapefile (.tif or .shp, in any projection)
+
+`-out` or `--output_raster` -- Full file path to the final difference raster
+
+`-csv` or `--output_csv` -- Full file path to the csv results (optional!)
+
+`-del` or `--delete_tmp` -- Option to delete temporary files (optional!)
+
+`-ns` or `--num_samples` -- Number of total samples if sampling will be applied (optional!)
+
+`-stf` or `--stratify` -- Stratification flag (no input required) based on reference data (optional!)
+
+`-nst` or `--no_stratify` -- No stratification flag option (optional!)
+
+`-sfp` or `--samples_filepath` -- Full file path to the sampling raster dataset (.tif ), if num samples not specified, \
+                        assumes samples will be read from this path (optional!)
+
+`-all` or `--all_metrics` -- Flag to indicate to compute all metrics, Default true. (optional!)
+
+`-na` or `--not_all_metrics` -- Flag to indicate not to compute all metrics, 
+                        metrics should be specified if activated. (optional!)
+
+`-mts` or  `--metrics` -- Optional list of metrics (keys) to run e.g. OA, UA, K. See metrics in `( )` above list.
+
 
 ## Accuracy Metrics
 All metrics are based on the confusion matrix of all the pixels that are within the common extent between a reprojected 
@@ -64,62 +135,3 @@ Module added for random and stratified sampling methods. Sampling module include
 encoded samples. Optional to enable sampling in Accuracy assessment workflow either by providing a preselected samples 
 raster or number of samples e.g. int  for class independent sampling or an iterable for (reference) class defined values
 e.g. \[n, m] where n and m are int.
-
-## Installation
-First, a conda environment containing GDAL needs to be created:
-
-    conda create --name abcraster -c conda-forge python=3.7 gdal=3.0.2
-    conda activate abcraster
-
-Aside from ogr/gdal the package requires the following dependencies:
-* Pandas
-* [Veranda](https://github.com/TUW-GEO/veranda) v0.1.0
-    
-The package itself can be installed by pip (from source or a repository):
-    
-    pip install abcraster
-
-In order to finish the setup of the GDAL environment, the following environment variables need to set:
-
-    export PROJ_LIB="[...]/miniconda/envs/abcraster/share/proj"
-    export GDAL_DATA="[...]/miniconda/envs/abcraster/share/gdal"
-
-** to get the path your conda envirment you can use `echo $CONDA_PREFIX` on Linux or  `echo %CONDA_PREFIX%` on Windows
-
-## Usage
-
-### Scripting
-The functionality of ABCRaster can be accessed through the `run` function inside of the `base` module.
-
-### Command line
-
-`python -m abcraster.command_line` or running `abcraster`
-
-`-in` or `--input_filepath` -- Full file path to the binary raster data 1= presence, 0=absennce, for now 255=nodata.
-
-`-ex` or `--exclusion_filepath` -- Full file path to the binary exclusion data 1=exclude, 
-for now 255=nodata
-
-`-ref` or `--reference_file` -- Full file path to the validation shapefile (.tif or .shp, in any projection)
-
-`-out` or `--output_raster` -- Full file path to the final difference raster
-
-`-csv` or `--output_csv` -- Full file path to the csv results (optional!)
-
-`-del` or `--delete_tmp` -- Option to delete temporary files (optional!)
-
-`-ns` or `--num_samples` -- Number of total samples if sampling will be applied (optional!)
-
-`-stf` or `--stratify` -- Stratification flag (no input required) based on reference data (optional!)
-
-`-nst` or `--no_stratify` -- No stratification flag option (optional!)
-
-`-sfp` or `--samples_filepath` -- Full file path to the sampling raster dataset (.tif ), if num samples not specified, \
-                        assumes samples will be read from this path (optional!)
-
-`-all` or `--all_metrics` -- Flag to indicate to compute all metrics, Default true. (optional!)
-
-`-na` or `--not_all_metrics` -- Flag to indicate not to compute all metrics, 
-                        metrics should be specified if activated. (optional!)
-
-`-mts` or  `--metrics` -- Optional list of metrics (keys) to run e.g. OA, UA, K. See metrics in `( )` above list.
