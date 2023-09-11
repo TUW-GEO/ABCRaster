@@ -50,7 +50,7 @@ class Validation:
                 self.sref = input_ds.sref_wkt
 
             # rasterize vector-based reference data
-            v_rasterized_path =  update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
+            v_rasterized_path = update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
                                                  new_root=out_dirpath)
             self.ref_data = rasterize(vec_path=ref_data_filepath, out_ras_path=v_rasterized_path,
                                       ras_path=input_data_filepath)

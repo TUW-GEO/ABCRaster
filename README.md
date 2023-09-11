@@ -39,7 +39,7 @@ the needed methods. An example of a self-defined workflow is given here:
     val = Validation(input_data_filepath=input_path, ref_data_filepath=ref_path, out_dirpath=out_dirpath)
 
     val.apply_mask(aoi_path, invert_mask=True)  # apply an area-of-interest (.tif or .shp)
-    val.apply_maks(mask_path)  # apply a general mask (.tif or .shp)
+    val.apply_mask(mask_path)  # apply a general mask (.tif or .shp)
     val.accuracy_assessment()  # calculate confusion matrix/map
     val.write_confusion_map(os.path.join(out_dirpath, 'val_diff.tif'))  # write confusion map to file
     print(val.calculate_accuracy_metric(critical_success_index))  # print the CSI value
