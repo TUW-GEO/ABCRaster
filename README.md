@@ -60,6 +60,10 @@ An already pre-defined workflow can be utilized in a Python script when using th
 The same pre-defined worklfow can be called through the command line by:
 
     python -m abcraster.base
+
+or 
+    
+    abcraster
     
 Furhter details can be defined using the following arguments:
 
@@ -132,7 +136,7 @@ F1 Score (F1) is computed by:
 
 Penalization function is computed by:
 
-![P=exp\left(\frac{FP}{(TP+FN)/ln(1/2)}\right)](https://latex.codecogs.com/svg.latex?P=exp\left(\frac{FP}{(TP+FN)/ln(1/2)}\right))              
+![P=exp\left(\frac{FP}{(TP+FN)/ln(1/2)}\right)](https://latex.codecogs.com/svg.latex?P=exp(\frac{FP}{(TP+FN)/ln(1/2)}))              
 
 Success Rate (SR) is computed by:
 

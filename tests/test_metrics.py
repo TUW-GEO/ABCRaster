@@ -3,6 +3,7 @@ from pytest import approx
 from abcraster.metrics import *
 import os
 from abcraster.base import run
+import subprocess
 
 #requires pytes and pytest-cov to be installed
 
@@ -112,24 +113,63 @@ def test_raster_shapfile():
 
     shp = 'EMSR271_02FARKADONA_DEL_v1_observed_event_a.shp'
     tif = 'FLOOD-HM_20180228T163112__VV_A175_E054N006T3_EU020M_V0M0R1_S1.tif'
+    aoi = 'EMSR271_02FARKADONA_DEL_v1_area_of_interest_a.shp'
 
     shp_path = os.path.join(data_path, shp)
     tif_path = os.path.join(data_path, tif)
+    aoi_path = os.path.join(data_path, aoi)
 
     temp_path = os.path.join(data_path, 'tmp')
     if not os.path.exists(temp_path):
         os.makedirs(temp_path)
 
-    df = run([tif_path], shp_path, temp_path, metrics.keys(), delete_tmp_files=True)
+    df = run([tif_path], shp_path, temp_path, metrics.keys(),
+             aoi_filepath=aoi_path, delete_tmp_files=True)
 
-    assert (df.loc['Overall Accuracy'][0] == approx(0.9691, abs=0.0001))
-    assert (df.loc['Kappa'][0] == approx(0.8108, abs=0.0001))
-    assert (df.loc['Critical Success Index'][0] == approx(0.70618, abs=0.0001))
-    assert (df.loc['Bias'][0] == approx(1.052137, abs=0.0001))
-    assert (df.loc['Prevalence'][0] == approx(0.087561, abs=0.0001))
-    assert (df.loc['Users Accuracy'][0] == approx(0.807281, abs=0.0001))
-    assert (df.loc['Producers Accuracy'][0] == approx(0.84937, abs=0.0001))
-    assert (df.loc['commission error'][0] == approx(0.192719, abs=0.0001))
-    assert (df.loc['omission error'][0] == approx(0.15063, abs=0.0001))
-    assert (df.loc['Success Rate'][0] == approx(0.718253, abs=0.0001))
-    assert (df.loc['F1 Score'][0] == approx(0.827791, abs=0.0001))
+    assert (df.loc['Overall Accuracy'][0] == approx(0.9704, abs=0.0001))
+    assert (df.loc['Kappa'][0] == approx(0.8135, abs=0.0001))
+    assert (df.loc['Critical Success Index'][0] == approx(0.7090, abs=0.0001))
+    assert (df.loc['Bias'][0] == approx(1.0474, abs=0.0001))
+    assert (df.loc['Prevalence'][0] == approx(0.0848, abs=0.0001))
+    assert (df.loc['Users Accuracy'][0] == approx(0.8109, abs=0.0001))
+    assert (df.loc['Producers Accuracy'][0] == approx(0.8494, abs=0.0001))
+    assert (df.loc['commission error'][0] == approx(0.1891, abs=0.0001))
+    assert (df.loc['omission error'][0] == approx(0.1506, abs=0.0001))
+    assert (df.loc['Success Rate'][0] == approx(0.7211, abs=0.0001))
+    assert (df.loc['F1 Score'][0] == approx(0.8297, abs=0.0001))
+    assert (df.loc['True Negative Rate'][0] == approx(0.9816, abs=0.0001))
+    assert (df.loc['False Positive Rate'][0] == approx(0.0184, abs=0.0001))
+    assert (df.loc['Negative Predictive Value'][0] == approx(0.9860, abs=0.0001))
+    assert (df.loc['False Omission Rate'][0] == approx(0.0140, abs=0.0001))
+
+
+def test_command_line():
+    """ test commandline interface """
+
+    data_path = os.path.join(os.path.dirname(__file__), 'data')
+
+    shp = 'EMSR271_02FARKADONA_DEL_v1_observed_event_a.shp'
+    tif1 = 'FLOOD-HM_20180228T163112__VV_A175_E054N006T3_EU020M_V0M0R1_S1.tif'
+    tif2 = 'FLOOD-HM_20180228T163112__VV_A175_E054N006T3_EU020M_V0M0R1_S1_Copy.tif'
+    aoi = 'EMSR271_02FARKADONA_DEL_v1_area_of_interest_a.shp'
+
+    shp_path = os.path.join(data_path, shp)
+    tif_path1 = os.path.join(data_path, tif1)
+    tif_path2 = os.path.join(data_path, tif2)
+    tif_paths = '{} {}'.format(tif_path1, tif_path2)
+    aoi_path = os.path.join(data_path, aoi)
+
+    temp_path = os.path.join(data_path, 'tmp')
+    if not os.path.exists(temp_path):
+        os.makedirs(temp_path)
+
+    diff_path = os.path.join(temp_path,'val.tif')
+
+    comm = 'abcraster -in {} -ref {} -aoi {} -out {} -csv {}'.format(tif_paths, shp_path,
+                                                                                    aoi_path, diff_path,
+                                                                                           'out_mult.csv')
+
+    result = subprocess.run(comm.split())
+
+    if result.returncode == 1:
+        raise RuntimeError

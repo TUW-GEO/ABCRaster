@@ -16,7 +16,7 @@ class Validation:
 
     def __init__(self, input_data_filepath, ref_data_filepath, out_dirpath, reproj_add_str='reproj',
                  rasterized_add_str='rasterized', delete_tmp_files=False, ras_data_nodata=255,
-                 ref_data_nodata=255):
+                 ref_data_nodata=255, clip2bbox=False):
         """
         Loads and harmonizes the classification resultan d reference data.
 
@@ -38,6 +38,8 @@ class Validation:
             No data value of the classification result (default: 255).
         ref_data_nodata: int, optional
             No data value of the reference data (default: 255).
+        clip2bbox: bool, optional
+            Clip rasterized reference vector to feature extents i.e. set nodata outside (default: False).
         """
 
         ref_file_ext = os.path.splitext(os.path.basename(ref_data_filepath))[1]
@@ -53,7 +55,8 @@ class Validation:
             v_rasterized_path = update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
                                                  new_root=out_dirpath)
             self.ref_data = rasterize(vec_path=ref_data_filepath, out_ras_path=v_rasterized_path,
-                                      ras_path=input_data_filepath)
+                                      ras_path=input_data_filepath, clip2bbox=clip2bbox)
+            ref_data_nodata = 255  # set ref no data based on rasterization done
 
             # delete temporary files if requested
             if delete_tmp_files:
@@ -82,16 +85,16 @@ class Validation:
                 else:
                     intersect_geom = None
 
-            if intersect_geom is None:
-                self.input_data = input_ds.read()[1]
-                self.gt = input_ds.geotrans
-                self.sref = input_ds.sref_wkt
-                self.ref_data = ref_ds.read()[1]
-            else:  # geocoding needs to be adapted
-                self.input_data = raster_read_from_polygon(input_data_filepath, intersect_geom)
-                self.gt = intersect_geom.geotrans
-                self.sref = intersect_geom.sref.wkt
-                self.ref_data = raster_read_from_polygon(ref_data_filepath, intersect_geom)
+                if intersect_geom is None:
+                    self.input_data = input_ds.read()[1]
+                    self.gt = input_ds.geotrans
+                    self.sref = input_ds.sref_wkt
+                    self.ref_data = ref_ds.read()[1]
+                else:  # geocoding needs to be adapted
+                    self.input_data = raster_read_from_polygon(input_data_filepath, intersect_geom)
+                    self.gt = intersect_geom.geotrans
+                    self.sref = intersect_geom.sref.wkt
+                    self.ref_data = raster_read_from_polygon(ref_data_filepath, intersect_geom)
 
         else:
             raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
@@ -272,7 +275,7 @@ def delete_shapefile(shp_path):
 
 def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samples_filepath=None, sampling=None,
         diff_ras_out_filename='val.tif', reproj_add_str='reproj', rasterized_add_str='rasterized',
-        out_csv_filename='val.csv', ex_filepath=None, delete_tmp_files=False):
+        out_csv_filename='val.csv', ex_filepath=None, aoi_filepath=None, delete_tmp_files=False):
     """
     Runs a validation workflow.
 
@@ -303,6 +306,8 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
         Output path of the validation measures as csv file. If set to None, no csv file is written (default: 'val.csv').
     ex_filepath: str, optional
         Path of the exclusion layer which is not applied if set to None (default: None).
+    aoi_filepath: str, optional
+        Path of the AOI layer which is not applied if set to None (default: None).
     delete_tmp_files: bool, optional
         Option to delete all temporary files (default: False).
     Returns
@@ -328,14 +333,23 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
         input_base_filename = os.path.basename(input_data_filepath)
         ref_base_filename = os.path.basename(ref_data_filepath)
 
+        if ex_filepath is None and aoi_filepath is None:
+            clip2bbox = True
+        else:
+            clip2bbox = False
+
         # initialize validation object
         v = Validation(input_data_filepath, ref_data_filepath=ref_data_filepath_current, out_dirpath=out_dirpath,
                        reproj_add_str=reproj_add_str, rasterized_add_str=rasterized_add_str,
-                       delete_tmp_files=delete_tmp_files_current, ref_data_nodata=255)
+                       delete_tmp_files=delete_tmp_files_current, ref_data_nodata=255, clip2bbox=clip2bbox)
 
         # apply exclusion mask
         if ex_filepath is not None:
             v.apply_mask(ex_filepath)
+
+        # apply aoi mask
+        if aoi_filepath is not None:
+            v.apply_mask(aoi_filepath, invert_mask=True)
 
         # handle sampling
         if samples_filepath is not None:  # logic, could be integrated in the object/class
@@ -399,7 +413,10 @@ def command_line_interface():
                         help="Full file path to the validation dataset (.tif or .shp, in any projection)",
                         required=True, type=str)
     parser.add_argument("-ex", "--exclusion_filepath",
-                        help="Full file path to the binary exclusion data 1= exclude, for now 255=nodata.",
+                        help="Full file path to the binary exclusion data 1= ex,can be a shapefile that is rasterized.",
+                        required=False, type=str)
+    parser.add_argument("-aoi", "--aoi_filepath",
+                        help="Full file path to the binary aoi data 1= aoi, can be a shapefile that is rasterized.",
                         required=False, type=str)
     parser.add_argument("-ns", "--num_samples",
                         help="number of total samples if sampling will be applied.", required=False, type=int)
@@ -428,6 +445,7 @@ def command_line_interface():
     args = parser.parse_args()
     input_raster_filepaths = args.input_filepaths
     exclusion_filepath = args.exclusion_filepath
+    aoi_filepath = args.aoi_filepath
     validation_filepath = args.reference_filepath
     output_raster_filepath = args.output_raster
     output_csv_filepath = args.output_csv
@@ -474,7 +492,8 @@ def command_line_interface():
 
     run(input_data_filepaths=input_raster_filepaths, ref_data_filepath=validation_filepath, out_dirpath=out_dirpath,
         diff_ras_out_filename=out_raster_filename, out_csv_filename=output_csv_filepath, ex_filepath=exclusion_filepath,
-        delete_tmp_files=delete_tmp, sampling=sampling, samples_filepath=samples_filepath, metrics_list=metrics_list)
+        aoi_filepath=aoi_filepath, delete_tmp_files=delete_tmp, sampling=sampling, samples_filepath=samples_filepath,
+        metrics_list=metrics_list)
 
 
 if __name__ == '__main__':

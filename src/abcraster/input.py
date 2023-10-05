@@ -154,7 +154,7 @@ def raster_read_from_polygon(fpath, geom):
     return raster_data.data_view.to_array().to_numpy()[0, 0, ...]
 
 
-def rasterize(vec_path, out_ras_path, ras_path):
+def rasterize(vec_path, out_ras_path, ras_path, clip2bbox=False):
     """
     Transforms a vector to a raster layer.
 
@@ -166,6 +166,8 @@ def rasterize(vec_path, out_ras_path, ras_path):
         Path of the output raster layer.
     ras_path: str
         Path of exemplary raster array.
+    clip2bbox: boolean
+        Assign nodata (255) to area outside the vector bounding box.
 
     Returns
     -------
@@ -191,6 +193,23 @@ def rasterize(vec_path, out_ras_path, ras_path):
                                     default_value=1,
                                     dtype = None)
 
+    if clip2bbox:
+        temp_raster = np.empty_like(rasterized)
+        temp_raster[:] = 255  # default nodata
+
+        maxRow, maxCol = temp_raster.shape
+        v_ext = vector.total_bounds
+        row_start, row_end, col_start, col_end = bounding_box2offsets(v_ext, raster.transform)
+
+        # overflow check
+        row_end = min([maxRow - 1, row_end])
+        col_end = min([maxCol - 1, col_end])
+        row_start = max([0, row_start])
+        col_start = max([0, col_start])
+
+        temp_raster[row_start:row_end, col_start:col_end] = rasterized[row_start:row_end, col_start:col_end]
+        rasterized = temp_raster
+
     # write output
     with rasterio.open(
         out_ras_path, "w",
@@ -207,11 +226,13 @@ def rasterize(vec_path, out_ras_path, ras_path):
 
 
 def bounding_box2offsets(bbox, geot):
-    """ Converts GDAL'S geotransform definition to bounding box. """
-    col1 = int((bbox[0] - geot[0]) / geot[1])
-    col2 = int((bbox[1] - geot[0]) / geot[1]) + 1
-    row1 = int((bbox[3] - geot[3]) / geot[5])
-    row2 = int((bbox[2] - geot[3]) / geot[5]) + 1
+    """ Converts geotransform definition to bounding box. """
+
+    col1 = int((bbox[0] - geot[2]) / geot[0])
+    col2 = int((bbox[2] - geot[2]) / geot[0]) + 1
+    row1 = int((bbox[3] - geot[5]) / geot[4])
+    row2 = int((bbox[1] - geot[5]) / geot[4]) + 1
+
     return [row1, row2, col1, col2]
 
 
