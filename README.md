@@ -106,49 +106,65 @@ TP - True Positive, FP - False Positive, TN - True Negative, and FP - False Nega
 
 Overall accuracy (OA) is computed as follows:
 
-![OA=\frac{TP+TN}{TP+TN+FP+FN}](https://latex.codecogs.com/svg.latex?OA=\frac{TP+TN}{TP+TN+FP+FN}) 
+$$OA=\frac{TP+TN}{TP+TN+FP+FN}$$ 
 
 
 Cohen's Kappa Coefficient (K) is computed from:
 
-![\kappa=\frac{OA+P_e}{1-P_e}](https://latex.codecogs.com/svg.latex?\kappa=\frac{OA+P_e}{1-P_e}) 
+$$\kappa=\frac{OA+P_e}{1-P_e}$$
 
 where ${P_e}$ is the probability of random agreement is given by:
 
-![P_e=\frac{(TP+FN)(TP+FP)+(TN+FN)(TN+FP)}{(TP+TN+FP+FN)^2}](https://latex.codecogs.com/svg.latex?P_e=\frac{(TP+FN)(TP+FP)+(TN+FN)(TN+FP)}{(TP+TN+FP+FN)^2}) 
+$$P_e=\frac{(TP+FN)(TP+FP)+(TN+FN)(TN+FP)}{(TP+TN+FP+FN)^2}$$
 
 
 User's Accuracy (UA) or Precision is computed by:
 
-![UA=\frac{TP}{(TP+FP)}](https://latex.codecogs.com/svg.latex?UA=\frac{TP}{(TP+FP)}) 
+$$UA=\frac{TP}{(TP+FP)}$$
 
 Producer's Accuracy (PA) or Recall is computed by:
 
-![PA=\frac{TP}{(TP+FN)}](https://latex.codecogs.com/svg.latex?PA=\frac{TP}{(TP+FN)}) 
+$$PA=\frac{TP}{(TP+FN)}$$
 
 Critical Success Index (CSI) is computed by:
 
-![CSI=\frac{TP}{(TP+FP+FN)}](https://latex.codecogs.com/svg.latex?CSI=\frac{TP}{(TP+FP+FN)}) 
+$$CSI=\frac{TP}{(TP+FP+FN)}$$
 
 F1 Score (F1) is computed by:
 
-![F1=\frac{2TP}{(2TP+FN+FP)}](https://latex.codecogs.com/svg.latex?F1=\frac{2TP}{(2TP+FN+FP)}) 
+$$F1=\frac{2TP}{(2TP+FN+FP)}$$
 
 Penalization function is computed by:
 
-![P=exp\left(\frac{FP}{(TP+FN)/ln(1/2)}\right)](https://latex.codecogs.com/svg.latex?P=exp(\frac{FP}{(TP+FN)/ln(1/2)}))              
+$$P=exp\left(\frac{FP}{(TP+FN)/ln(1/2)}\right)$$              
 
 Success Rate (SR) is computed by:
 
-![SR=PA-(1-P)](https://latex.codecogs.com/svg.latex?SR=PA-(1-P)) 
+$$SR=PA-(1-P)$$
 
 Bias (B) is computed by:
 
-![b=(TP+FP)/(TP+FN)](https://latex.codecogs.com/svg.latex?b=(TP+FP)/(TP+FN))
+$$b=\frac{TP+FP}{TP+FN}$$
  
 Prevalence (P) is computed by:
 
-![Pre=(TP+FN)/(TP+FN+TN+FP)](https://latex.codecogs.com/svg.latex?Pre=(TP+FN)/(TP+FN+TN+FP))
+$$Pre=\frac{TP+FN}{TP+FN+TN+FP}$$
+
+True negative rate (TNR) is computed by:
+
+$$TNR=\frac{TN}{FP+TN}$$
+
+False positive rate (FPR) is computed by:
+
+$$FPR=\frac{FP}{FP+TN}$$
+
+Negative predictive value (NPV) is computed by:
+
+$$NPV=\frac{TN}{FN+TN}$$
+
+False omission rate (FOR) is computed by:
+
+$$FOR=\frac{FN}{FN+TN}$$
 
 ## Sampling
 Module added for random and stratified sampling methods. Sampling module includes stand-alone CLI for creating raster 

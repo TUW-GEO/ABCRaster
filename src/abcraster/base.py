@@ -265,13 +265,6 @@ class Validation:
             src.write(np.expand_dims(self.confusion_map, axis=0))
 
 
-def delete_shapefile(shp_path):
-    """ Deletes all files from which belong to a shapefile. """
-    driver = ogr.GetDriverByName("ESRI Shapefile")
-    if os.path.exists(shp_path):
-        driver.DeleteDataSource(shp_path)
-
-
 def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samples_filepath=None, sampling=None,
         diff_ras_out_filename='val.tif', reproj_add_str='reproj', rasterized_add_str='rasterized',
         out_csv_filename='val.csv', ex_filepath=None, aoi_filepath=None, delete_tmp_files=False):
