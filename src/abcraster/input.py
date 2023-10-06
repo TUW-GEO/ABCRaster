@@ -1,35 +1,14 @@
-# Copyright (c) 2022, Vienna University of Technology (TU Wien), Department
-# of Geodesy and Geoinformation (GEO).
-# All rights reserved.
-
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-# ARE DISCLAIMED. IN NO EVENT SHALL VIENNA UNIVERSITY OF TECHNOLOGY,
-# DEPARTMENT OF GEODESY AND GEOINFORMATION BE LIABLE FOR ANY DIRECT, INDIRECT,
-# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
-# OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
-# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+from veranda.raster.mosaic.geotiff import GeoTiffReader
+from geospade.raster import RasterGeometry
 from osgeo import gdal, ogr, osr
+from rasterio import features
+import geopandas as gpd
 import numpy as np
+import rasterio
 import os
 
 
-def get_equi7grid_geotags(tile, sres=20, continent='EU'):
-    """ Retrieve spatial details of an Equi7grid tile. """
-    from equi7grid.equi7grid import Equi7Grid  # moved import here to make equi7grid optional
-    grid = Equi7Grid(sres).subgrids[continent]
-    tile_geotags = grid.tilesys.create_tile(name=tile).get_geotags()
-    gt, sref = tile_geotags['geotransform'], tile_geotags['spatialreference']
-
-    return gt, sref
-
-
-def reproject_vec(layer, out_sref, v_reprojected_filepath='tmp.shp'):
+def vec_reproject(layer, out_sref, v_reprojected_filepath='tmp.shp'):
     """
     Reprojects a vector layer to a different projection.
 
@@ -93,88 +72,199 @@ def reproject_vec(layer, out_sref, v_reprojected_filepath='tmp.shp'):
     outLayer = None
 
 
-def rasterize(vec_ds, out_ras_path, ras_data, gt, sref, v_reprojected_filepath='tmp.shp', bg_absence=True):
+def raster_reproject(fpath, sref, res, out_dirpath, reproj_add_str):
+    """
+    Reprojects first raster dataset to the spatial reference of the second raster dataset.
+
+    Parameters
+    ----------
+    fpath: str
+        Raster file path to be reprojected.
+    sref: str
+        Aimed spatial reference as WKT.
+    res: int
+        Aimed spatial resolution.
+    out_dirpath: str
+        Directory to which the output will be written to.
+    reproj_add_str: str
+        String which will be added to the filename of vector or raster files after reprojecting.
+
+    Returns
+    -------
+    out_reproj_path: str
+        Path of the reprojected raster file.
+    """
+
+    out_reproj_path = update_filepath(fpath, add_str=reproj_add_str, new_root=out_dirpath)
+
+    warp = gdal.Warp(out_reproj_path, fpath, dstSRS=sref, resampleAlg='near', xRes=res, yRes=res)
+    warp = None  # Closes the files
+
+    return out_reproj_path
+
+
+def raster_intersect(geom1, geom2):
+    """
+    Retrieves the intersecting geometry from two raster datasets.
+
+    Parameters
+    ----------
+    geom1: RasterGeometry
+        Geometry of the first raster file.
+    geom2: RasterGeometry
+        Geometry of the second raster file.
+
+    Returns
+    -------
+    intersection: RasterGeometry
+        Geometry of the intersection.
+    """
+
+    if not geom1.intersects(geom2):
+        raise ValueError("Input data does not intersect reference data.")
+
+    intersection = geom1.slice_by_geom(geom2, sref=geom2.sref.wkt)
+    intersection = intersection.slice_by_geom(geom1, sref=geom1.sref.wkt)
+
+    return intersection
+
+
+def raster_read_from_polygon(fpath, geom):
+    """
+    Reads the area defined by the passed polygon from a raster file.
+
+    Parameters
+    ----------
+    fpath: str
+        Path of the input raster files.
+    geom: RasterGeometry
+        Polygon to read from the raster file.
+
+    Returns
+    -------
+    arr: np.ndarray
+        Resulting numpy array.
+    """
+
+    raster_data = GeoTiffReader.from_filepaths([fpath])
+    raster_data.select_polygon(geom.boundary, sref=geom.sref, inplace=True)
+    raster_data.read()
+    raster_data.close()
+
+    return raster_data.data_view.to_array().to_numpy()[0, 0, ...]
+
+
+def rasterize(vec_path, out_ras_path, ras_path, nodata=255, clip2bbox=False):
     """
     Transforms a vector to a raster layer.
 
     Parameters
     ----------
-    vec_ds: ogr vector layer
-        Vector layer to be rasterized.
+    vec_path: str
+        Path of the vector layer to be rasterized.
     out_ras_path: str
         Path of the output raster layer.
-    ras_data: numpy.array
-        Exemplary raster array.
-    gt: tuple
-        GDAL geotransform definition of output raster.
-    sref: osr.SpatialReference
-        Spatial projection of the output raster layer.
-    v_reprojected_filepath: str
-        Path of the temporary reprojected vector layer.
-    bg_absence: bool, optional
-        Option to limit comparison to the vector layer extent (default: True).
+    ras_path: str
+        Path of exemplary raster array.
+    nodata: int
+        No data value of output raster. (default: 255).
+    clip2bbox: boolean
+        Assign nodata (255) to area outside the vector bounding box.
 
     Returns
     -------
-    out_ras_data: numpy.array
+    rasterized: numpy.array
         Resulting raster array.
     """
 
-    rasterYSize, rasterXSize = ras_data.shape
-    gtiff_driver = gdal.GetDriverByName("GTiff")
-    out_ds = gtiff_driver.Create(out_ras_path, rasterXSize, rasterYSize, 1, gdal.GDT_Byte)
-    out_ds.SetGeoTransform(gt)
-    out_ds.SetProjection(sref)
-    vec_layer = vec_ds.GetLayer()
+    # Open example raster
+    raster = rasterio.open(ras_path)
 
-    out_sref = osr.SpatialReference()
-    out_sref.ImportFromWkt(sref)
+    # Read and transform vector layer
+    vector = gpd.read_file(vec_path)
+    vector = vector.to_crs(raster.crs)
+    geom = [shapes for shapes in vector.geometry]
 
-    in_sref = vec_layer.GetSpatialRef()
+    # Rasterize vector using the shape and coordinate system of the raster
+    rasterized = features.rasterize(geom,
+                                    out_shape=raster.shape,
+                                    fill=0,
+                                    out=None,
+                                    transform=raster.transform,
+                                    all_touched=False,
+                                    default_value=1,
+                                    dtype = None)
 
-    if in_sref != out_sref:
-        print('reprojecting...')
-        reproject_vec(vec_layer, out_sref, v_reprojected_filepath)
-        print('done... reprojecting')
+    if clip2bbox:
+        temp_raster = np.empty_like(rasterized)
+        temp_raster[:] = nodata
 
-        # returning layer object and using that to rasterize results it segmentation fault.
-        driver = ogr.GetDriverByName('ESRI Shapefile')
-        reProjDataSet = driver.Open(v_reprojected_filepath)
-        vec_layer = reProjDataSet.GetLayer()
+        maxRow, maxCol = temp_raster.shape
+        v_ext = vector.total_bounds
+        row_start, row_end, col_start, col_end = bounding_box2offsets(v_ext, raster.transform)
 
-    # burn polygons as presence,
-    # TODO: add attribute filtering for presence and absence
-    # TODO: add elif to get attribute.
-    gdal.RasterizeLayer(out_ds, [1], vec_layer, burn_values=[1])
-    outBand = out_ds.GetRasterBand(1)
-    outBand.SetNoDataValue(255)
-    out_ras_data = outBand.ReadAsArray()
-
-    output = np.empty_like(out_ras_data, dtype=np.uint8)
-    maxRow, maxCol = output.shape
-    output[:] = 255  # default nodata
-    if bg_absence:
-        v_ext = vec_layer.GetExtent()
-        row_start, row_end, col_start, col_end = bounding_box2offsets(v_ext, gt)
         # overflow check
         row_end = min([maxRow - 1, row_end])
         col_end = min([maxCol - 1, col_end])
         row_start = max([0, row_start])
         col_start = max([0, col_start])
-        output[row_start:row_end, col_start:col_end] = 0
-    output[out_ras_data == 1] = 1
-    outBand.WriteArray(output)
-    out_ras_data = output
 
-    outBand = None
-    out_ds = None
-    return out_ras_data
+        temp_raster[row_start:row_end, col_start:col_end] = rasterized[row_start:row_end, col_start:col_end]
+        rasterized = temp_raster
+
+    # write output
+    with rasterio.open(
+        out_ras_path, "w",
+        driver="GTiff",
+        crs=raster.crs,
+        transform=raster.transform,
+        dtype=rasterio.uint8,
+        count=1,
+        width=raster.width,
+        height=raster.height) as dst:
+            dst.write(rasterized, indexes=1)
+
+    return rasterized
 
 
 def bounding_box2offsets(bbox, geot):
-    """ Converts GDAL'S geotransform definition to bounding box. """
-    col1 = int((bbox[0] - geot[0]) / geot[1])
-    col2 = int((bbox[1] - geot[0]) / geot[1]) + 1
-    row1 = int((bbox[3] - geot[3]) / geot[5])
-    row2 = int((bbox[2] - geot[3]) / geot[5]) + 1
+    """ Converts geotransform definition to bounding box. """
+
+    col1 = int((bbox[0] - geot[2]) / geot[0])
+    col2 = int((bbox[2] - geot[2]) / geot[0]) + 1
+    row1 = int((bbox[3] - geot[5]) / geot[4])
+    row2 = int((bbox[1] - geot[5]) / geot[4]) + 1
+
     return [row1, row2, col1, col2]
+
+
+def update_filepath(fpath, add_str=None, new_ext=None, new_root=None):
+    """
+    Updates the filename in a given path by adding a string at the end and optionally update the file extension.
+
+    Parameters
+    ----------
+    fpath: str
+        Input file path.
+    add_str: str, optional
+        String to be added to the filename (default: None).
+    new_ext: str, optional
+        New file extension (default: None).
+    new_root: str, optional
+        New directory for the file (default: None).
+
+    Returns
+    -------
+    updated_filepath: str
+        Updated file path.
+    """
+
+    orig_dirpath, orig_fname = os.path.split(fpath)
+    orig_name, orig_ext = os.path.splitext(orig_fname)
+    orig_ext = orig_ext.replace('.', '')
+
+    add_str = '' if add_str is None else '_' + add_str
+    ext = new_ext.replace('.', '') if new_ext is not None else orig_ext
+    dir_path = new_root if new_root is not None else orig_dirpath
+
+    return os.path.join(dir_path, orig_name + add_str + '.' + ext)

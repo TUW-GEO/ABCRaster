@@ -49,3 +49,20 @@ MANIFEST
 
 # Per-project virtualenvs
 .venv*/
+/tests/data/tmp/
+/tests/data/EMSR271_02FARKADONA_DEL_v1_observed_event_a.dbf
+/tests/data/EMSR271_02FARKADONA_DEL_v1_observed_event_a.kmz
+/tests/data/EMSR271_02FARKADONA_DEL_v1_observed_event_a.prj
+/tests/data/EMSR271_02FARKADONA_DEL_v1_observed_event_a.shp
+/tests/data/EMSR271_02FARKADONA_DEL_v1_observed_event_a.shx
+/tests/data/EMSR271_02FARKADONA_DEL_v1_observed_event_a_re.dbf
+/tests/data/EMSR271_02FARKADONA_DEL_v1_observed_event_a_re.prj
+/tests/data/EMSR271_02FARKADONA_DEL_v1_observed_event_a_re.shp
+/tests/data/EMSR271_02FARKADONA_DEL_v1_observed_event_a_re.shx
+/tests/data/FLOOD-HM_20180228T163112__VV_A175_E054N006T3_EU020M_V0M0R1_S1.tif
+/tests/data/FLOOD-HM_20180228T163112__VV_A175_E054N006T3_EU020M_V0M0R1_S1_Copy.tif
+/tests/data/EMSR271_02FARKADONA_DEL_v1_area_of_interest_a.dbf
+/tests/data/EMSR271_02FARKADONA_DEL_v1_area_of_interest_a.kmz
+/tests/data/EMSR271_02FARKADONA_DEL_v1_area_of_interest_a.prj
+/tests/data/EMSR271_02FARKADONA_DEL_v1_area_of_interest_a.shp
+/tests/data/EMSR271_02FARKADONA_DEL_v1_area_of_interest_a.shx
