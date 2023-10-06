@@ -154,7 +154,7 @@ def raster_read_from_polygon(fpath, geom):
     return raster_data.data_view.to_array().to_numpy()[0, 0, ...]
 
 
-def rasterize(vec_path, out_ras_path, ras_path, clip2bbox=False):
+def rasterize(vec_path, out_ras_path, ras_path, nodata=255, clip2bbox=False):
     """
     Transforms a vector to a raster layer.
 
@@ -166,6 +166,8 @@ def rasterize(vec_path, out_ras_path, ras_path, clip2bbox=False):
         Path of the output raster layer.
     ras_path: str
         Path of exemplary raster array.
+    nodata: int
+        No data value of output raster. (default: 255).
     clip2bbox: boolean
         Assign nodata (255) to area outside the vector bounding box.
 
@@ -195,7 +197,7 @@ def rasterize(vec_path, out_ras_path, ras_path, clip2bbox=False):
 
     if clip2bbox:
         temp_raster = np.empty_like(rasterized)
-        temp_raster[:] = 255  # default nodata
+        temp_raster[:] = nodata
 
         maxRow, maxCol = temp_raster.shape
         v_ext = vector.total_bounds

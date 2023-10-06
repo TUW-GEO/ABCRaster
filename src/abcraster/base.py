@@ -55,8 +55,7 @@ class Validation:
             v_rasterized_path = update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
                                                  new_root=out_dirpath)
             self.ref_data = rasterize(vec_path=ref_data_filepath, out_ras_path=v_rasterized_path,
-                                      ras_path=input_data_filepath, clip2bbox=clip2bbox)
-            ref_data_nodata = 255  # set ref no data based on rasterization done
+                                      ras_path=input_data_filepath, nodata=ref_data_nodata, clip2bbox=clip2bbox)
 
             # delete temporary files if requested
             if delete_tmp_files:
