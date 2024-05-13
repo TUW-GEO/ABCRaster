@@ -188,7 +188,8 @@ class Validation:
                 mask_sref = mask_ds.sref_wkt
 
                 if self.sref != mask_sref:
-                    mask_path = raster_reproject(mask_path, self.sref, self.out_dirpath, self.reproj_add_str)
+                    mask_path = raster_reproject(mask_path, self.sref, int(self.gt[1]), self.out_dirpath, 
+                                                 self.reproj_add_str)
 
                 if self.gt != mask_gt:
                     geom = RasterGeometry(n_rows=self.input_data.shape[0], n_cols=self.input_data.shape[1],
