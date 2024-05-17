@@ -1,16 +1,17 @@
 import os
 import argparse
+
+import rasterio
 from osgeo import ogr
 import numpy as np
 import pandas as pd
-from geospade.raster import RasterGeometry
-from geospade.crs import SpatialRef
 from veranda.raster.native.geotiff import GeoTiffFile
 import rasterio as rio
 from rasterio.enums import Resampling
+from rasterio.transform import Affine
 from shapely.geometry import box
 
-from abcraster.input import rasterize, raster_reproject, raster_intersect, raster_read_from_polygon, update_filepath
+from abcraster.input import rasterize, raster_reproject, update_filepath
 from abcraster.sampling import gen_random_sample
 from abcraster.metrics import metrics
 
@@ -50,10 +51,11 @@ class Validation:
 
         if ref_file_ext == '.shp':
             # load classification result
-            with GeoTiffFile(input_data_filepath) as input_ds:
-                self.input_data = input_ds.read()[1]
-                self.gt = input_ds.geotrans
-                self.sref = input_ds.sref_wkt
+            with rasterio.open(input_data_filepath) as input_ds:
+                self.input_data = input_ds.read()[0, ...]
+                self.gt = input_ds.transform.to_gdal()  # TODO: switch to rasterio defaults
+                self.sref = input_ds.crs.to_wkt()
+                self.bounds = input_ds.bounds
 
             # rasterize vector-based reference data
             v_rasterized_path = update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
@@ -66,34 +68,27 @@ class Validation:
                 os.remove(v_rasterized_path)
 
         elif ref_file_ext == '.tif':
-            with rio.open(input_data_filepath) as input_ds, rio.open(ref_data_filepath) as ref_ds:
-                x_scale = ref_ds.transform.a / input_ds.transform.a
-                y_scale = ref_ds.transform.e / input_ds.transform.e
-                transform = ref_ds.transform * ref_ds.transform.scale(
-                    (ref_ds.width / ref_ds.shape[-1]),
-                    (ref_ds.height / ref_ds.shape[-2])
-                )
+            with rio.open(input_data_filepath) as input_ds:
+                with rio.open(ref_data_filepath) as ref_ds:
+                    if input_ds.crs != ref_ds.crs or input_ds.res[0] != ref_ds.res[0]:
+                        ref_data_filepath = raster_reproject(ref_data_filepath, input_ds.crs.to_wkt(),
+                                                             input_ds.res[0], out_dirpath, reproj_add_str)  # TODO: replace this with rasterio.warp function?
 
-                ext1 = box(*input_ds.bounds)
-                ext2 = box(*ref_ds.bounds)
-                intersection = ext1.intersection(ext2)
-                win1 = rio.windows.from_bounds(*intersection.bounds, input_ds.transform)
-                win2 = rio.windows.from_bounds(*intersection.bounds, transform)
+                with rio.open(ref_data_filepath) as ref_ds:
+                    ext1 = box(*input_ds.bounds)
+                    ext2 = box(*ref_ds.bounds)
+                    if not ext1.intersects(ext2):
+                        raise Exception("The two rasters do not intersect.")
+                    intersection = ext1.intersection(ext2)
+                    win1 = rio.windows.from_bounds(*intersection.bounds, input_ds.transform)
+                    win2 = rio.windows.from_bounds(*intersection.bounds, ref_ds.transform)
 
-                self.input_data = input_ds.read(window=win1)[0, ...]
-                self.ref_data = ref_ds.read(
-                    window=win2,
-                    out_shape=(
-                        ref_ds.count,
-                        int(win2.height * y_scale),
-                        int(win2.width * x_scale)
-                    ),
-                    resampling=Resampling.nearest
-                )
-                self.ref_data = self.ref_data[0, ...]
-                inst_trans = input_ds.window_transform(win1)
-                self.gt = inst_trans.to_gdal()
-                self.sref = input_ds.crs.to_wkt()
+                    self.input_data = input_ds.read(window=win1)[0, ...]
+                    self.ref_data = ref_ds.read(window=win2)[0, ...]
+                    inst_trans = input_ds.window_transform(win1)
+                    self.gt = inst_trans.to_gdal()
+                    self.sref = input_ds.crs.to_wkt()
+                    self.bounds = win1.bounds
 
         else:
             raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
@@ -183,20 +178,21 @@ class Validation:
                                                 new_root=self.out_dirpath)
             ex_mask = rasterize(vec_path=mask_path, out_ras_path=v_rasterized_path, ras_path=self.input_path)
         elif mask_ext == '.tif':
-            with GeoTiffFile(mask_path) as mask_ds:
-                mask_gt = mask_ds.geotrans
-                mask_sref = mask_ds.sref_wkt
-
-                if self.sref != mask_sref:
+            with rio.open(mask_path) as mask_ds:
+                if self.sref != mask_ds.crs.to_wkt() or int(self.gt[1]) != mask_ds.res[0]:
                     mask_path = raster_reproject(mask_path, self.sref, int(self.gt[1]), self.out_dirpath, 
                                                  self.reproj_add_str)
 
-                if self.gt != mask_gt:
-                    geom = RasterGeometry(n_rows=self.input_data.shape[0], n_cols=self.input_data.shape[1],
-                                          sref=SpatialRef(self.sref, sref_type='wkt'), geotrans=self.gt)
-                    ex_mask = raster_read_from_polygon(mask_path, geom)
+            with rio.open(mask_path) as mask_ds:
+                if self.gt != mask_ds.transform.to_gdal():
+                    mask_ext = box(*mask_ds.bounds)
+                    input_ext = box(*self.bounds)
+                    if not mask_ext.intersects(input_ext):
+                        raise Exception("Mask does not match the classification data.")
+                    wind = rio.windows.from_bounds(*self.bounds, Affine.from_gdal(self.gt))
+                    ex_mask = mask_ds.read(window=wind)[0, ...]
                 else:
-                    ex_mask = mask_ds.read()[1]
+                    ex_mask = mask_ds.read()[0, ...]
 
         else:
             raise ValueError("Input file with extension " + mask_ext + " is not supported.")

@@ -1,5 +1,3 @@
-from veranda.raster.mosaic.geotiff import GeoTiffReader
-from geospade.raster import RasterGeometry
 from osgeo import gdal, ogr, osr
 from rasterio import features
 import geopandas as gpd
@@ -101,57 +99,6 @@ def raster_reproject(fpath, sref, res, out_dirpath, reproj_add_str):
     warp = None  # Closes the files
 
     return out_reproj_path
-
-
-def raster_intersect(geom1, geom2):
-    """
-    Retrieves the intersecting geometry from two raster datasets.
-
-    Parameters
-    ----------
-    geom1: RasterGeometry
-        Geometry of the first raster file.
-    geom2: RasterGeometry
-        Geometry of the second raster file.
-
-    Returns
-    -------
-    intersection: RasterGeometry
-        Geometry of the intersection.
-    """
-
-    if not geom1.intersects(geom2):
-        raise ValueError("Input data does not intersect reference data.")
-
-    intersection = geom1.slice_by_geom(geom2, sref=geom2.sref.wkt)
-    intersection = intersection.slice_by_geom(geom1, sref=geom1.sref.wkt)
-
-    return intersection
-
-
-def raster_read_from_polygon(fpath, geom):
-    """
-    Reads the area defined by the passed polygon from a raster file.
-
-    Parameters
-    ----------
-    fpath: str
-        Path of the input raster files.
-    geom: RasterGeometry
-        Polygon to read from the raster file.
-
-    Returns
-    -------
-    arr: np.ndarray
-        Resulting numpy array.
-    """
-
-    raster_data = GeoTiffReader.from_filepaths([fpath])
-    raster_data.select_polygon(geom.boundary, sref=geom.sref, inplace=True)
-    raster_data.read()
-    raster_data.close()
-
-    return raster_data.data_view.to_array().to_numpy()[0, 0, ...]
 
 
 def rasterize(vec_path, out_ras_path, ras_path, nodata=255, clip2bbox=False):
