@@ -6,6 +6,10 @@ import pandas as pd
 from geospade.raster import RasterGeometry
 from geospade.crs import SpatialRef
 from veranda.raster.native.geotiff import GeoTiffFile
+import rasterio as rio
+from rasterio.enums import Resampling
+from shapely.geometry import box
+
 from abcraster.input import rasterize, raster_reproject, raster_intersect, raster_read_from_polygon, update_filepath
 from abcraster.sampling import gen_random_sample
 from abcraster.metrics import metrics
@@ -62,38 +66,34 @@ class Validation:
                 os.remove(v_rasterized_path)
 
         elif ref_file_ext == '.tif':
-            # calculate details of harmonized raster datasets
-            with GeoTiffFile(input_data_filepath) as input_ds, GeoTiffFile(ref_data_filepath) as ref_ds:
-                input_gt = input_ds.geotrans
-                input_sref = input_ds.sref_wkt
-                ref_gt = ref_ds.geotrans
-                ref_sref = ref_ds.sref_wkt
+            with rio.open(input_data_filepath) as input_ds, rio.open(ref_data_filepath) as ref_ds:
+                x_scale = ref_ds.transform.a / input_ds.transform.a
+                y_scale = ref_ds.transform.e / input_ds.transform.e
+                transform = ref_ds.transform * ref_ds.transform.scale(
+                    (ref_ds.width / ref_ds.shape[-1]),
+                    (ref_ds.height / ref_ds.shape[-2])
+                )
 
-                if ref_sref != input_sref:
-                    ref_data_filepath = raster_reproject(ref_ds.filepath, input_ds.sref_wkt, int(input_ds.geotrans[1]),
-                                                         out_dirpath, reproj_add_str)
+                ext1 = box(*input_ds.bounds)
+                ext2 = box(*ref_ds.bounds)
+                intersection = ext1.intersection(ext2)
+                win1 = rio.windows.from_bounds(*intersection.bounds, input_ds.transform)
+                win2 = rio.windows.from_bounds(*intersection.bounds, transform)
 
-                if ref_gt != input_gt:
-                    input_geom = RasterGeometry(n_rows=input_ds.raster_shape[0], n_cols=input_ds.raster_shape[1],
-                                                sref=SpatialRef(input_ds.sref_wkt, sref_type='wkt'),
-                                                geotrans=input_ds.geotrans)
-                    ref_geom = RasterGeometry(n_rows=ref_ds.raster_shape[0], n_cols=ref_ds.raster_shape[1],
-                                              sref=SpatialRef(ref_ds.sref_wkt, sref_type='wkt'),
-                                              geotrans=ref_ds.geotrans)
-                    intersect_geom = raster_intersect(input_geom, ref_geom)
-                else:
-                    intersect_geom = None
-
-                if intersect_geom is None:
-                    self.input_data = input_ds.read()[1]
-                    self.gt = input_ds.geotrans
-                    self.sref = input_ds.sref_wkt
-                    self.ref_data = ref_ds.read()[1]
-                else:  # geocoding needs to be adapted
-                    self.input_data = raster_read_from_polygon(input_data_filepath, intersect_geom)
-                    self.gt = intersect_geom.geotrans
-                    self.sref = intersect_geom.sref.wkt
-                    self.ref_data = raster_read_from_polygon(ref_data_filepath, intersect_geom)
+                self.input_data = input_ds.read(window=win1)[0, ...]
+                self.ref_data = ref_ds.read(
+                    window=win2,
+                    out_shape=(
+                        ref_ds.count,
+                        int(win2.height * y_scale),
+                        int(win2.width * x_scale)
+                    ),
+                    resampling=Resampling.nearest
+                )
+                self.ref_data = self.ref_data[0, ...]
+                inst_trans = input_ds.window_transform(win1)
+                self.gt = inst_trans.to_gdal()
+                self.sref = input_ds.crs.to_wkt()
 
         else:
             raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
