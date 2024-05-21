@@ -2,18 +2,16 @@ import os
 import argparse
 
 import rasterio
-from osgeo import ogr
 import numpy as np
 import pandas as pd
-from veranda.raster.native.geotiff import GeoTiffFile
 import rasterio as rio
-from rasterio.enums import Resampling
 from rasterio.transform import Affine
 from shapely.geometry import box
 
 from abcraster.input import rasterize, raster_reproject, update_filepath
 from abcraster.sampling import gen_random_sample
 from abcraster.metrics import metrics
+from abcraster.output import write_raster
 
 
 class Validation:
@@ -53,8 +51,8 @@ class Validation:
             # load classification result
             with rasterio.open(input_data_filepath) as input_ds:
                 self.input_data = input_ds.read()[0, ...]
-                self.gt = input_ds.transform.to_gdal()  # TODO: switch to rasterio defaults
-                self.sref = input_ds.crs.to_wkt()
+                self.gt = input_ds.transform
+                self.sref = input_ds.crs
                 self.bounds = input_ds.bounds
 
             # rasterize vector-based reference data
@@ -86,9 +84,9 @@ class Validation:
                     self.input_data = input_ds.read(window=win1)[0, ...]
                     self.ref_data = ref_ds.read(window=win2)[0, ...]
                     inst_trans = input_ds.window_transform(win1)
-                    self.gt = inst_trans.to_gdal()
-                    self.sref = input_ds.crs.to_wkt()
-                    self.bounds = win1.bounds
+                    self.gt = inst_trans
+                    self.sref = input_ds.crs
+                    self.bounds = intersection.bounds
 
         else:
             raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
@@ -149,15 +147,13 @@ class Validation:
 
         # write output
         if samples_filepath is not None:
-            with GeoTiffFile(samples_filepath, mode='w', geotrans=self.gt, sref_wkt=self.sref, nodatavals=255,
-                             overwrite=True) as src:
-                src.write(np.expand_dims(self.samples, axis=0))
+            write_raster(arr=self.samples, out_filepath=samples_filepath, sref=self.sref, gt=self.gt, nodata=255)
 
     def load_sampling(self, samples_filepath):
         """Loads the samples from a raster file."""
 
-        with GeoTiffFile(samples_filepath) as src:
-            self.samples = src.read()[1]
+        with rasterio.open(samples_filepath) as input_ds:
+            self.samples = input_ds.read()[0, ...]
 
     def apply_mask(self, mask_path, invert_mask=False):
         """
@@ -243,9 +239,7 @@ class Validation:
         """
 
         valid = np.logical_and(self.ref_data != 255, self.input_data != 255)
-        with GeoTiffFile(valid_filepath, mode='w', geotrans=self.gt, sref_wkt=self.sref, nodatavals=255,
-                         overwrite=True) as src:
-            src.write(np.expand_dims(valid, axis=0))
+        write_raster(arr=valid, out_filepath=valid_filepath, sref=self.sref, gt=self.gt, nodata=255)
 
     def write_confusion_map(self, out_filepath):
         """
@@ -257,9 +251,7 @@ class Validation:
             Path of the output file.
         """
 
-        with GeoTiffFile(out_filepath, mode='w', geotrans=self.gt, sref_wkt=self.sref, nodatavals=255,
-                         overwrite=True) as src:
-            src.write(np.expand_dims(self.confusion_map, axis=0))
+        write_raster(arr=self.confusion_map, out_filepath=out_filepath, sref=self.sref, gt=self.gt, nodata=255)
 
 
 def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samples_filepath=None, sampling=None,
@@ -299,6 +291,7 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
         Path of the AOI layer which is not applied if set to None (default: None).
     delete_tmp_files: bool, optional
         Option to delete all temporary files (default: False).
+
     Returns
     -------
     df: Pandas dataframe
