@@ -176,16 +176,16 @@ class Validation:
         elif mask_ext == '.tif':
             with rio.open(mask_path) as mask_ds:
                 if self.sref != mask_ds.crs.to_wkt() or int(self.gt[1]) != mask_ds.res[0]:
-                    mask_path = raster_reproject(mask_path, self.sref, int(self.gt[1]), self.out_dirpath, 
-                                                 self.reproj_add_str)
+                    mask_path = raster_reproject(mask_path, self.sref.to_wkt(), int(self.gt.to_gdal()[1]),
+                                                 self.out_dirpath, self.reproj_add_str)
 
             with rio.open(mask_path) as mask_ds:
-                if self.gt != mask_ds.transform.to_gdal():
+                if self.gt != mask_ds.transform:
                     mask_ext = box(*mask_ds.bounds)
                     input_ext = box(*self.bounds)
                     if not mask_ext.intersects(input_ext):
                         raise Exception("Mask does not match the classification data.")
-                    wind = rio.windows.from_bounds(*self.bounds, Affine.from_gdal(self.gt))
+                    wind = rio.windows.from_bounds(*self.bounds, self.gt)
                     ex_mask = mask_ds.read(window=wind)[0, ...]
                 else:
                     ex_mask = mask_ds.read()[0, ...]
