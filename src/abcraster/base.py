@@ -5,7 +5,6 @@ import rasterio
 import numpy as np
 import pandas as pd
 import rasterio as rio
-from rasterio.transform import Affine
 from shapely.geometry import box
 
 from abcraster.input import rasterize, raster_reproject, update_filepath
@@ -175,7 +174,7 @@ class Validation:
             ex_mask = rasterize(vec_path=mask_path, out_ras_path=v_rasterized_path, ras_path=self.input_path)
         elif mask_ext == '.tif':
             with rio.open(mask_path) as mask_ds:
-                if self.sref != mask_ds.crs.to_wkt() or int(self.gt[1]) != mask_ds.res[0]:
+                if self.sref != mask_ds.crs or float(self.gt.to_gdal()[1]) != float(mask_ds.res[0]):
                     mask_path = raster_reproject(mask_path, self.sref.to_wkt(), int(self.gt.to_gdal()[1]),
                                                  self.out_dirpath, self.reproj_add_str)
 
@@ -185,7 +184,7 @@ class Validation:
                     input_ext = box(*self.bounds)
                     if not mask_ext.intersects(input_ext):
                         raise Exception("Mask does not match the classification data.")
-                    wind = rio.windows.from_bounds(*self.bounds, self.gt)
+                    wind = rio.windows.from_bounds(*self.bounds, mask_ds.transform)
                     ex_mask = mask_ds.read(window=wind)[0, ...]
                 else:
                     ex_mask = mask_ds.read()[0, ...]
