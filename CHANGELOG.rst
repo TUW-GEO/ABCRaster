@@ -5,7 +5,6 @@ Changelog
 Version 0.3.1
 ===========
 
-- Revamped handling of two raster inputs as classification and reference
 - Replaced base of I/O operations with rasterio
 - Fixed bugs in the masking functionality
 

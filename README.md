@@ -11,22 +11,14 @@ accuracy assessment, or comparing classification results (.tif) versus a referen
 * creates confusion (difference) tiff file 
 
 ## Installation
-First, a conda environment containing GDAL needs to be created:
+First, a conda environment containing GDAL needs to be created. Here, we suggest to use mamba for the sake of speed:
 
-    conda create -n "abcraster" -c conda-forge python=3.8 mamba
+    mamba create -n abcraster -c conda-forge python=3.11 gdal geopandas
     conda activate abcraster
-    mamba install -c conda-forge python=3.8 gdal geopandas cartopy
     
 The package itself can be installed by pip (from source or a repository):
     
     pip install abcraster
-
-In order to finish the setup of the GDAL environment, the following environment variables need to set:
-
-    export PROJ_LIB="[...]/miniconda/envs/abcraster/share/proj"
-    export GDAL_DATA="[...]/miniconda/envs/abcraster/share/gdal"
-
-** to get the path your conda envirment you can use `echo $CONDA_PREFIX` on Linux or  `echo %CONDA_PREFIX%` on Windows
 
 ## Usage
 
