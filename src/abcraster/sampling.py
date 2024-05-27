@@ -1,6 +1,7 @@
 import argparse
-from veranda.raster.native.geotiff import GeoTiffFile
+import rasterio
 import numpy as np
+from abcraster.output import write_raster
 
 
 def gen_random_sample(num_samples, data, ref, nodata=255, exclusion=None):
@@ -143,25 +144,22 @@ def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255, ex_pat
     None
     """
 
-    with GeoTiffFile(data_path, auto_decode=False) as src:
-        data = src.read()[1]
-        data_gt = src.geotrans
-        data_sref = src.sref_wkt
+    with rasterio.open(data_path) as src:
+        data = src.read()[0, ...]
+        data_gt, data_sref = src.transform, src.crs
 
-    with GeoTiffFile(ref_path, auto_decode=False) as src:
-        ref = src.read()[1]
-        ref_gt = src.geotransform
-        ref_sref = src.spatialref
+    with rasterio.open(ref_path) as src:
+        ref = src.read()[0, ...]
+        ref_gt, ref_sref = src.transform, src.crs
 
     if ref_gt != data_gt | ref_sref != data_sref:
         print("WARNING: Grid/projection of input and reference data are not the same!")
 
     if ex_path is not None:
-        with GeoTiffFile(ex_path, auto_decode=False) as src:
-            ex = src.read()[1]
-            ex_gt = src.geotransform
-            ex_sref = src.spatialref
-            ex = ex.astype(bool)  # force boolean type
+        with rasterio.open(ex_path) as src:
+            ex = src.read()[0, ...]
+            ex_gt, ex_sref = src.transform, src.crs
+        ex = ex.astype(bool)
 
         if ex_gt != data_gt | ex_sref != data_sref:
             raise RuntimeError("Grid/projection of input and exclusion data are not the same!")
@@ -169,9 +167,7 @@ def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255, ex_pat
         ex = None
 
     samples = gen_random_sample(num_samples, data, ref, nodata=nodata, exclusion=ex)
-
-    with GeoTiffFile(out_path, mode='w', geotrans=ref_gt, sref_wkt=ref_sref, nodatavals=255, overwrite=True) as src:
-        src.write(np.expand_dims(samples.astype(np.uint8), axis=0))
+    write_raster(arr=samples.astype(np.uint8), sref=ref_sref, gt=ref_gt, nodata=255)
 
 
 def command_line_interface():
