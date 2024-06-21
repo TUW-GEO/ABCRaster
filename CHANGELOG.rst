@@ -2,6 +2,12 @@
 Changelog
 =========
 
+Version 0.4.0
+===========
+
+- Replaced base of I/O operations with rasterio
+- Fixed bugs in the masking functionality
+
 Version 0.3.0
 ===========
 

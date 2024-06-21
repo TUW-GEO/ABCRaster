@@ -1,14 +1,16 @@
 import os
 import argparse
-from osgeo import ogr
+
+import rasterio
 import numpy as np
 import pandas as pd
-from geospade.raster import RasterGeometry
-from geospade.crs import SpatialRef
-from veranda.raster.native.geotiff import GeoTiffFile
-from abcraster.input import rasterize, raster_reproject, raster_intersect, raster_read_from_polygon, update_filepath
+import rasterio as rio
+from shapely.geometry import box
+
+from abcraster.input import rasterize, raster_reproject, update_filepath
 from abcraster.sampling import gen_random_sample
 from abcraster.metrics import metrics
+from abcraster.output import write_raster
 
 
 class Validation:
@@ -46,10 +48,11 @@ class Validation:
 
         if ref_file_ext == '.shp':
             # load classification result
-            with GeoTiffFile(input_data_filepath) as input_ds:
-                self.input_data = input_ds.read()[1]
-                self.gt = input_ds.geotrans
-                self.sref = input_ds.sref_wkt
+            with rasterio.open(input_data_filepath) as input_ds:
+                self.input_data = input_ds.read()[0, ...]
+                self.gt = input_ds.transform
+                self.sref = input_ds.crs
+                self.bounds = input_ds.bounds
 
             # rasterize vector-based reference data
             v_rasterized_path = update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
@@ -62,38 +65,27 @@ class Validation:
                 os.remove(v_rasterized_path)
 
         elif ref_file_ext == '.tif':
-            # calculate details of harmonized raster datasets
-            with GeoTiffFile(input_data_filepath) as input_ds, GeoTiffFile(ref_data_filepath) as ref_ds:
-                input_gt = input_ds.geotrans
-                input_sref = input_ds.sref_wkt
-                ref_gt = ref_ds.geotrans
-                ref_sref = ref_ds.sref_wkt
+            with rio.open(input_data_filepath) as input_ds:
+                with rio.open(ref_data_filepath) as ref_ds:
+                    if input_ds.crs != ref_ds.crs or input_ds.res[0] != ref_ds.res[0]:
+                        ref_data_filepath = raster_reproject(ref_data_filepath, input_ds.crs.to_wkt(),
+                                                             input_ds.res[0], out_dirpath, reproj_add_str)  # TODO: replace this with rasterio.warp function?
 
-                if ref_sref != input_sref:
-                    ref_data_filepath = raster_reproject(ref_ds.filepath, input_ds.sref_wkt, int(input_ds.geotrans[1]),
-                                                         out_dirpath, reproj_add_str)
+                with rio.open(ref_data_filepath) as ref_ds:
+                    ext1 = box(*input_ds.bounds)
+                    ext2 = box(*ref_ds.bounds)
+                    if not ext1.intersects(ext2):
+                        raise Exception("The two rasters do not intersect.")
+                    intersection = ext1.intersection(ext2)
+                    win1 = rio.windows.from_bounds(*intersection.bounds, input_ds.transform)
+                    win2 = rio.windows.from_bounds(*intersection.bounds, ref_ds.transform)
 
-                if ref_gt != input_gt:
-                    input_geom = RasterGeometry(n_rows=input_ds.raster_shape[0], n_cols=input_ds.raster_shape[1],
-                                                sref=SpatialRef(input_ds.sref_wkt, sref_type='wkt'),
-                                                geotrans=input_ds.geotrans)
-                    ref_geom = RasterGeometry(n_rows=ref_ds.raster_shape[0], n_cols=ref_ds.raster_shape[1],
-                                              sref=SpatialRef(ref_ds.sref_wkt, sref_type='wkt'),
-                                              geotrans=ref_ds.geotrans)
-                    intersect_geom = raster_intersect(input_geom, ref_geom)
-                else:
-                    intersect_geom = None
-
-                if intersect_geom is None:
-                    self.input_data = input_ds.read()[1]
-                    self.gt = input_ds.geotrans
-                    self.sref = input_ds.sref_wkt
-                    self.ref_data = ref_ds.read()[1]
-                else:  # geocoding needs to be adapted
-                    self.input_data = raster_read_from_polygon(input_data_filepath, intersect_geom)
-                    self.gt = intersect_geom.geotrans
-                    self.sref = intersect_geom.sref.wkt
-                    self.ref_data = raster_read_from_polygon(ref_data_filepath, intersect_geom)
+                    self.input_data = input_ds.read(window=win1)[0, ...]
+                    self.ref_data = ref_ds.read(window=win2)[0, ...]
+                    inst_trans = input_ds.window_transform(win1)
+                    self.gt = inst_trans
+                    self.sref = input_ds.crs
+                    self.bounds = intersection.bounds
 
         else:
             raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
@@ -154,15 +146,13 @@ class Validation:
 
         # write output
         if samples_filepath is not None:
-            with GeoTiffFile(samples_filepath, mode='w', geotrans=self.gt, sref_wkt=self.sref, nodatavals=255,
-                             overwrite=True) as src:
-                src.write(np.expand_dims(self.samples, axis=0))
+            write_raster(arr=self.samples, out_filepath=samples_filepath, sref=self.sref, gt=self.gt, nodata=255)
 
     def load_sampling(self, samples_filepath):
         """Loads the samples from a raster file."""
 
-        with GeoTiffFile(samples_filepath) as src:
-            self.samples = src.read()[1]
+        with rasterio.open(samples_filepath) as input_ds:
+            self.samples = input_ds.read()[0, ...]
 
     def apply_mask(self, mask_path, invert_mask=False):
         """
@@ -183,19 +173,21 @@ class Validation:
                                                 new_root=self.out_dirpath)
             ex_mask = rasterize(vec_path=mask_path, out_ras_path=v_rasterized_path, ras_path=self.input_path)
         elif mask_ext == '.tif':
-            with GeoTiffFile(mask_path) as mask_ds:
-                mask_gt = mask_ds.geotrans
-                mask_sref = mask_ds.sref_wkt
+            with rio.open(mask_path) as mask_ds:
+                if self.sref != mask_ds.crs or float(self.gt.to_gdal()[1]) != float(mask_ds.res[0]):
+                    mask_path = raster_reproject(mask_path, self.sref.to_wkt(), int(self.gt.to_gdal()[1]),
+                                                 self.out_dirpath, self.reproj_add_str)
 
-                if self.sref != mask_sref:
-                    mask_path = raster_reproject(mask_path, self.sref, self.out_dirpath, self.reproj_add_str)
-
-                if self.gt != mask_gt:
-                    geom = RasterGeometry(n_rows=self.input_data.shape[0], n_cols=self.input_data.shape[1],
-                                          sref=SpatialRef(self.sref, sref_type='wkt'), geotrans=self.gt)
-                    ex_mask = raster_read_from_polygon(mask_path, geom)
+            with rio.open(mask_path) as mask_ds:
+                if self.gt != mask_ds.transform:
+                    mask_ext = box(*mask_ds.bounds)
+                    input_ext = box(*self.bounds)
+                    if not mask_ext.intersects(input_ext):
+                        raise Exception("Mask does not match the classification data.")
+                    wind = rio.windows.from_bounds(*self.bounds, mask_ds.transform)
+                    ex_mask = mask_ds.read(window=wind)[0, ...]
                 else:
-                    ex_mask = mask_ds.read()[1]
+                    ex_mask = mask_ds.read()[0, ...]
 
         else:
             raise ValueError("Input file with extension " + mask_ext + " is not supported.")
@@ -246,9 +238,7 @@ class Validation:
         """
 
         valid = np.logical_and(self.ref_data != 255, self.input_data != 255)
-        with GeoTiffFile(valid_filepath, mode='w', geotrans=self.gt, sref_wkt=self.sref, nodatavals=255,
-                         overwrite=True) as src:
-            src.write(np.expand_dims(valid, axis=0))
+        write_raster(arr=valid, out_filepath=valid_filepath, sref=self.sref, gt=self.gt, nodata=255)
 
     def write_confusion_map(self, out_filepath):
         """
@@ -260,9 +250,7 @@ class Validation:
             Path of the output file.
         """
 
-        with GeoTiffFile(out_filepath, mode='w', geotrans=self.gt, sref_wkt=self.sref, nodatavals=255,
-                         overwrite=True) as src:
-            src.write(np.expand_dims(self.confusion_map, axis=0))
+        write_raster(arr=self.confusion_map, out_filepath=out_filepath, sref=self.sref, gt=self.gt, nodata=255)
 
 
 def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samples_filepath=None, sampling=None,
@@ -302,6 +290,7 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
         Path of the AOI layer which is not applied if set to None (default: None).
     delete_tmp_files: bool, optional
         Option to delete all temporary files (default: False).
+
     Returns
     -------
     df: Pandas dataframe
