@@ -1,0 +1,37 @@
+[project]
+authors = [{ name = "TU Wien GEO RS group"}]
+name = "abcraster"
+dynamic = ["version"]
+description = "ABCRaster stands for Accuracy assessment of Binary Classified Raster. It is a package for performing validation, accuracy assessment, or comparing binary classified rasters (.tiff) versus a reference (.shp)."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas",
+    "numpy",
+    "rasterio",
+    "shapely",
+]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Software Development :: Libraries",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: POSIX",
+    "Natural Language :: English",
+]
+[project.urls]
+Repository = "https://github.com/TUW-GEO/ABCRaster"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+test = [
+    "pytest",
+    "pytest-cov"
+]
+trunk = []
