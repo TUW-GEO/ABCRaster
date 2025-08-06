@@ -101,9 +101,9 @@ def raster_reproject(fpath, sref, res, out_dirpath, reproj_add_str):
     return out_reproj_path
 
 
-def rasterize(vec_path, out_ras_path, ras_path, nodata=255, clip2bbox=False):
+def rasterize_by_raster(vec_path, out_ras_path, ras_path, nodata=255, clip2bbox=False):
     """
-    Transforms a vector to a raster layer.
+    Transforms a vector to a raster layer based on an example raster file.
 
     Parameters
     ----------
@@ -124,20 +124,52 @@ def rasterize(vec_path, out_ras_path, ras_path, nodata=255, clip2bbox=False):
         Resulting raster array.
     """
 
-    # Open example raster
     raster = rasterio.open(ras_path)
+    rasterize(vec_path=vec_path, out_ras_path=out_ras_path, out_sref=raster.crs, out_shape=raster.shape,
+              out_transform=raster.transform, nodata=255, clip2bbox=False)
+    raster.close()
+
+    return rasterized
+
+
+def rasterize(vec_path, out_ras_path, out_sref, out_shape, out_transform, nodata=255, clip2bbox=False):
+    """
+    Transforms a vector to a raster layer.
+
+    Parameters
+    ----------
+    vec_path: str
+        Path of the vector layer to be rasterized.
+    out_ras_path: str
+        Path of the output raster layer.
+    out_sref: rasterio.crs
+        Output projection.
+    out_shape: tuple
+        Rows and columns of output raster file.
+    out_transform: tuple
+        Output geospatial tranform information.
+    nodata: int, optional
+        No data value of output raster. (default: 255).
+    clip2bbox: boolean, optional
+        Assign nodata (255) to area outside the vector bounding box.
+
+    Returns
+    -------
+    rasterized: numpy.array
+        Resulting raster array.
+    """
 
     # Read and transform vector layer
     vector = gpd.read_file(vec_path)
-    vector = vector.to_crs(raster.crs)
+    vector = vector.to_crs(out_sref)
     geom = [shapes for shapes in vector.geometry]
 
     # Rasterize vector using the shape and coordinate system of the raster
     rasterized = features.rasterize(geom,
-                                    out_shape=raster.shape,
+                                    out_shape=out_shape,
                                     fill=0,
                                     out=None,
-                                    transform=raster.transform,
+                                    transform=out_transform,
                                     all_touched=False,
                                     default_value=1,
                                     dtype = None)
@@ -148,7 +180,7 @@ def rasterize(vec_path, out_ras_path, ras_path, nodata=255, clip2bbox=False):
 
         maxRow, maxCol = temp_raster.shape
         v_ext = vector.total_bounds
-        row_start, row_end, col_start, col_end = bounding_box2offsets(v_ext, raster.transform)
+        row_start, row_end, col_start, col_end = bounding_box2offsets(v_ext, out_transform)
 
         # overflow check
         row_end = min([maxRow - 1, row_end])
@@ -163,12 +195,12 @@ def rasterize(vec_path, out_ras_path, ras_path, nodata=255, clip2bbox=False):
     with rasterio.open(
         out_ras_path, "w",
         driver="GTiff",
-        crs=raster.crs,
-        transform=raster.transform,
+        crs=out_sref,
+        transform=out_transform,
         dtype=rasterio.uint8,
         count=1,
-        width=raster.width,
-        height=raster.height) as dst:
+        width=out_shape[1],
+        height=out_shape[0]) as dst:
             dst.write(rasterized, indexes=1)
 
     return rasterized
