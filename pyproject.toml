@@ -6,10 +6,7 @@ description = "ABCRaster stands for Accuracy assessment of Binary Classified Ras
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "pandas",
-    "numpy",
-    "rasterio",
-    "shapely",
+    "geocube",
 ]
 classifiers = [
     "Intended Audience :: Science/Research",

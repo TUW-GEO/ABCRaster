@@ -1,13 +1,13 @@
 import os
 import argparse
 
-import rasterio
+import geopandas as gpd
+import rioxarray
 import numpy as np
 import pandas as pd
-import rasterio as rio
 from shapely.geometry import box
+from geocube.api.core import make_geocube
 
-from abcraster.input import rasterize, rasterize_by_raster, raster_reproject, update_filepath
 from abcraster.sampling import gen_random_sample
 from abcraster.metrics import metrics
 from abcraster.output import write_raster
@@ -47,46 +47,21 @@ class Validation:
         ref_file_ext = os.path.splitext(os.path.basename(ref_data_filepath))[1]
 
         if ref_file_ext == '.shp':
-            # load classification result
-            with rasterio.open(input_data_filepath) as input_ds:
-                self.input_data = input_ds.read()[0, ...]
-                self.gt = input_ds.transform
-                self.sref = input_ds.crs
-                self.bounds = input_ds.bounds
-
-            # rasterize vector-based reference data
-            v_rasterized_path = update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
-                                                 new_root=out_dirpath)
-            self.ref_data = rasterize_by_raster(vec_path=ref_data_filepath, out_ras_path=v_rasterized_path,
-                                                ras_path=input_data_filepath, nodata=ref_data_nodata,
-                                                clip2bbox=clip2bbox)
-
-            # delete temporary files if requested
-            if delete_tmp_files:
-                os.remove(v_rasterized_path)
+            ref_vec_data = gpd.read_file(ref_data_filepath)
+            ref_vec_data['binary'] = 1
+            self.input_ds = rioxarray.open_rasterio(input_data_filepath)
+            self.ref_ds = make_geocube(
+                vector_data=ref_vec_data,
+                measurements=['binary'],
+                like=self.input_ds,
+                fill=ref_data_nodata
+            )
+            self.ref_ds = self.ref_ds["binary"]
 
         elif ref_file_ext == '.tif':
-            with rio.open(input_data_filepath) as input_ds:
-                with rio.open(ref_data_filepath) as ref_ds:
-                    if input_ds.crs != ref_ds.crs or input_ds.res[0] != ref_ds.res[0]:
-                        ref_data_filepath = raster_reproject(ref_data_filepath, input_ds.crs.to_wkt(),
-                                                             input_ds.res[0], out_dirpath, reproj_add_str)  # TODO: replace this with rasterio.warp function?
-
-                with rio.open(ref_data_filepath) as ref_ds:
-                    ext1 = box(*input_ds.bounds)
-                    ext2 = box(*ref_ds.bounds)
-                    if not ext1.intersects(ext2):
-                        raise Exception("The two rasters do not intersect.")
-                    intersection = ext1.intersection(ext2)
-                    win1 = rio.windows.from_bounds(*intersection.bounds, input_ds.transform)
-                    win2 = rio.windows.from_bounds(*intersection.bounds, ref_ds.transform)
-
-                    self.input_data = input_ds.read(window=win1)[0, ...]
-                    self.ref_data = ref_ds.read(window=win2)[0, ...]
-                    inst_trans = input_ds.window_transform(win1)
-                    self.gt = inst_trans
-                    self.sref = input_ds.crs
-                    self.bounds = intersection.bounds
+            self.input_ds = rioxarray.open_rasterio(input_data_filepath)
+            self.ref_ds = rioxarray.open_rasterio(ref_data_filepath)
+            self.ref_ds = self.ref_ds.rio.reproject_match(self.input_ds)
 
         else:
             raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
@@ -381,6 +356,38 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
     df.to_csv(os.path.join(out_dirpath, out_csv_filename))
 
     return df
+
+
+def update_filepath(fpath, add_str=None, new_ext=None, new_root=None):
+    """
+    Updates the filename in a given path by adding a string at the end and optionally update the file extension.
+
+    Parameters
+    ----------
+    fpath: str
+        Input file path.
+    add_str: str, optional
+        String to be added to the filename (default: None).
+    new_ext: str, optional
+        New file extension (default: None).
+    new_root: str, optional
+        New directory for the file (default: None).
+
+    Returns
+    -------
+    updated_filepath: str
+        Updated file path.
+    """
+
+    orig_dirpath, orig_fname = os.path.split(fpath)
+    orig_name, orig_ext = os.path.splitext(orig_fname)
+    orig_ext = orig_ext.replace('.', '')
+
+    add_str = '' if add_str is None else '_' + add_str
+    ext = new_ext.replace('.', '') if new_ext is not None else orig_ext
+    dir_path = new_root if new_root is not None else orig_dirpath
+
+    return os.path.join(dir_path, orig_name + add_str + '.' + ext)
 
 
 def command_line_interface():
