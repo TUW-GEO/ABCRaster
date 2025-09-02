@@ -125,8 +125,8 @@ def rasterize_by_raster(vec_path, out_ras_path, ras_path, nodata=255, clip2bbox=
     """
 
     raster = rasterio.open(ras_path)
-    rasterize(vec_path=vec_path, out_ras_path=out_ras_path, out_sref=raster.crs, out_shape=raster.shape,
-              out_transform=raster.transform, nodata=255, clip2bbox=False)
+    rasterized = rasterize(vec_path=vec_path, out_ras_path=out_ras_path, out_sref=raster.crs, out_shape=raster.shape,
+                           out_transform=raster.transform, nodata=255, clip2bbox=False)
     raster.close()
 
     return rasterized
