@@ -13,8 +13,7 @@ from abcraster.input import rasterize_to_rioxarray, ensure_path
 class Validation:
     """Class to perform a validation of binary classification results."""
 
-    def __init__(self, input_data_filepath: Path, ref_data_filepath: Path, out_dirpath: Path,
-                 ras_data_nodata: int = 255, ref_data_nodata: int = 255):
+    def __init__(self, input_data_filepath: Path, ref_data_filepath: Path, out_dirpath: Path):
         """
         Loads and harmonizes the classification result and reference data.
 
@@ -54,8 +53,6 @@ class Validation:
         self.samples = None
         self.confusion_matrix = None
         self.confusion_map = None
-        self.input_nodata = ras_data_nodata
-        self.ref_nodata = ref_data_nodata
         self.out_dirpath = out_dirpath
 
     def accuracy_assessment(self):
@@ -63,8 +60,8 @@ class Validation:
 
         # calculating difference between classification and reference
         res = 1 + (2 * self.input_ds.values) - self.ref_ds.values
-        res[self.input_ds.values == self.input_nodata] = 255
-        res[self.ref_ds.values == self.ref_nodata] = 255
+        res[self.input_ds.values == self.input_ds.rio.nodata] = 255
+        res[self.ref_ds.values == self.ref_ds.rio.nodata] = 255
         self.confusion_map = res
 
         # apply sampling
@@ -141,7 +138,7 @@ class Validation:
             ex_mask = ex_mask == 1
         if self.confusion_map is not None:
             self.confusion_map[ex_mask.values] = 255
-        self.input_ds = self.input_ds.where(ex_mask, self.input_nodata)
+        self.input_ds = self.input_ds.where(ex_mask, self.input_ds.rio.nodata)
 
     def calculate_accuracy_metric(self, metric_func):
         """
@@ -256,8 +253,7 @@ def run(input_data_filepaths, ref_data_filepath: Path, out_dirpath: Path, metric
         input_data_filepath = input_data_filepaths[i]
 
         # initialize validation object
-        v = Validation(input_data_filepath, ref_data_filepath=input_data_filepath, out_dirpath=out_dirpath,
-                       ref_data_nodata=255)
+        v = Validation(input_data_filepath, ref_data_filepath=input_data_filepath, out_dirpath=out_dirpath)
 
         # apply exclusion mask
         if ex_filepath is not None:
