@@ -1,7 +1,6 @@
 import argparse
-import rasterio
+import rioxarray
 import numpy as np
-from abcraster.output import write_raster
 
 
 def gen_random_sample(num_samples, data, ref, nodata=255, exclusion=None):
@@ -144,30 +143,19 @@ def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255, ex_pat
     None
     """
 
-    with rasterio.open(data_path) as src:
-        data = src.read()[0, ...]
-        data_gt, data_sref = src.transform, src.crs
-
-    with rasterio.open(ref_path) as src:
-        ref = src.read()[0, ...]
-        ref_gt, ref_sref = src.transform, src.crs
-
-    if ref_gt != data_gt | ref_sref != data_sref:
-        print("WARNING: Grid/projection of input and reference data are not the same!")
-
+    input_data = rioxarray.open_rasterio(data_path)
+    ref_data = rioxarray.open_rasterio(ref_path)
+    ref_data = ref_data.rio.reproject_match(input_data)
     if ex_path is not None:
-        with rasterio.open(ex_path) as src:
-            ex = src.read()[0, ...]
-            ex_gt, ex_sref = src.transform, src.crs
-        ex = ex.astype(bool)
-
-        if ex_gt != data_gt | ex_sref != data_sref:
-            raise RuntimeError("Grid/projection of input and exclusion data are not the same!")
+        ex_data = rioxarray.open_rasterio(ex_path).values
     else:
-        ex = None
+        ex_data = None
 
-    samples = gen_random_sample(num_samples, data, ref, nodata=nodata, exclusion=ex)
-    write_raster(arr=samples.astype(np.uint8), sref=ref_sref, gt=ref_gt, nodata=255)
+    samples = gen_random_sample(num_samples, input_data.values, ref_data.values, nodata=nodata,
+                                exclusion=ex_data)
+    out_ds = input_data.copy(deep=True)
+    out_ds.values = samples
+    out_ds.rio.to_raster(out_path)
 
 
 def command_line_interface():

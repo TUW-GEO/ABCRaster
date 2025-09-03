@@ -95,17 +95,16 @@ class Validation:
         """
 
         # performs sampling
-        self.samples = gen_random_sample(sampling, self.input_data, self.ref_data, nodata=255)
+        self.samples = gen_random_sample(sampling, self.input_ds.values, self.ref_ds.values, nodata=255)
 
         # write output
         if samples_filepath is not None:
-            write_raster(arr=self.samples, out_filepath=samples_filepath, sref=self.sref, gt=self.gt, nodata=255)
+            self.write_output_file(self.samples, samples_filepath)
 
     def load_sampling(self, samples_filepath):
         """Loads the samples from a raster file."""
 
-        with rasterio.open(samples_filepath) as input_ds:
-            self.samples = input_ds.read()[0, ...]
+        self.samples = rioxarray.open_rasterio(samples_filepath).values
 
     def apply_mask(self, mask_path: Path, invert_mask=False):
         """
