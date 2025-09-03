@@ -1,16 +1,13 @@
 import os
 import argparse
-
 import geopandas as gpd
 import rioxarray
 import numpy as np
 import pandas as pd
-from shapely.geometry import box
-from geocube.api.core import make_geocube
-
 from abcraster.sampling import gen_random_sample
 from abcraster.metrics import metrics
 from abcraster.output import write_raster
+from abcraster.input import rasterize_to_rioxarray, update_filepath
 
 
 class Validation:
@@ -48,15 +45,8 @@ class Validation:
 
         if ref_file_ext == '.shp':
             ref_vec_data = gpd.read_file(ref_data_filepath)
-            ref_vec_data['binary'] = 1
             self.input_ds = rioxarray.open_rasterio(input_data_filepath)
-            self.ref_ds = make_geocube(
-                vector_data=ref_vec_data,
-                measurements=['binary'],
-                like=self.input_ds,
-                fill=ref_data_nodata
-            )
-            self.ref_ds = self.ref_ds["binary"]
+            self.ref_ds = rasterize_to_rioxarray(vec_gpf=ref_vec_data, riox_arr=self.input_ds)
 
         elif ref_file_ext == '.tif':
             self.input_ds = rioxarray.open_rasterio(input_data_filepath)
@@ -81,9 +71,9 @@ class Validation:
         """Runs validation on aligned numpy arrays."""
 
         # calculating difference between classification and reference
-        res = 1 + (2 * self.input_data) - self.ref_data
-        res[self.input_data == self.input_nodata] = 255
-        res[self.ref_data == self.ref_nodata] = 255
+        res = 1 + (2 * self.input_ds.values) - self.ref_ds.values
+        res[self.input_ds.values == self.input_nodata] = 255
+        res[self.ref_ds.values == self.ref_nodata] = 255
         self.confusion_map = res
 
         # apply sampling
@@ -145,27 +135,11 @@ class Validation:
         # load mask layer
         mask_ext = os.path.splitext(os.path.basename(mask_path))[1]
         if mask_ext == '.shp':
-            v_rasterized_path = update_filepath(mask_path, add_str=self.rasterized_add_str, new_ext='tif',
-                                                new_root=self.out_dirpath)
-            ex_mask = rasterize(vec_path=mask_path, out_ras_path=v_rasterized_path, out_sref=self.sref,
-                                out_shape=self.input_data.shape, out_transform=self.gt)
+            mask_vec_data = gpd.read_file(mask_path)
+            ex_mask = rasterize_to_rioxarray(vec_gpf=mask_vec_data, riox_arr=self.input_ds)
         elif mask_ext == '.tif':
-            with rio.open(mask_path) as mask_ds:
-                if self.sref != mask_ds.crs or float(self.gt.to_gdal()[1]) != float(mask_ds.res[0]):
-                    mask_path = raster_reproject(mask_path, self.sref.to_wkt(), int(self.gt.to_gdal()[1]),
-                                                 self.out_dirpath, self.reproj_add_str)
-
-            with rio.open(mask_path) as mask_ds:
-                if self.gt != mask_ds.transform:
-                    mask_ext = box(*mask_ds.bounds)
-                    input_ext = box(*self.bounds)
-                    if not mask_ext.intersects(input_ext):
-                        raise Exception("Mask does not match the classification data.")
-                    wind = rio.windows.from_bounds(*self.bounds, mask_ds.transform)
-                    ex_mask = mask_ds.read(window=wind)[0, ...]
-                else:
-                    ex_mask = mask_ds.read()[0, ...]
-
+            ex_mask = rioxarray.open_rasterio(mask_path)
+            ex_mask = ex_mask.rio.reproject_match(self.input_ds)
         else:
             raise ValueError("Input file with extension " + mask_ext + " is not supported.")
 
@@ -175,8 +149,8 @@ class Validation:
         else:
             ex_mask = ex_mask == 1
         if self.confusion_map is not None:
-            self.confusion_map[ex_mask] = 255
-        self.input_data[ex_mask] = 255
+            self.confusion_map[ex_mask.values] = 255
+        self.input_ds = self.input_ds.where(ex_mask, self.input_nodata)
 
     def calculate_accuracy_metric(self, metric_func):
         """
@@ -356,38 +330,6 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
     df.to_csv(os.path.join(out_dirpath, out_csv_filename))
 
     return df
-
-
-def update_filepath(fpath, add_str=None, new_ext=None, new_root=None):
-    """
-    Updates the filename in a given path by adding a string at the end and optionally update the file extension.
-
-    Parameters
-    ----------
-    fpath: str
-        Input file path.
-    add_str: str, optional
-        String to be added to the filename (default: None).
-    new_ext: str, optional
-        New file extension (default: None).
-    new_root: str, optional
-        New directory for the file (default: None).
-
-    Returns
-    -------
-    updated_filepath: str
-        Updated file path.
-    """
-
-    orig_dirpath, orig_fname = os.path.split(fpath)
-    orig_name, orig_ext = os.path.splitext(orig_fname)
-    orig_ext = orig_ext.replace('.', '')
-
-    add_str = '' if add_str is None else '_' + add_str
-    ext = new_ext.replace('.', '') if new_ext is not None else orig_ext
-    dir_path = new_root if new_root is not None else orig_dirpath
-
-    return os.path.join(dir_path, orig_name + add_str + '.' + ext)
 
 
 def command_line_interface():
