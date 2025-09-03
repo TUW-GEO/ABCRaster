@@ -198,23 +198,23 @@ class Validation:
         self.write_output_file(self.confusion_map, out_filepath)
 
 
-def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samples_filepath=None, sampling=None,
-        diff_ras_out_filename='val.tif', reproj_add_str='reproj', rasterized_add_str='rasterized',
-        out_csv_filename='val.csv', ex_filepath=None, aoi_filepath=None, delete_tmp_files=False):
+def run(input_data_filepaths, ref_data_filepath: Path, out_dirpath: Path, metrics_list: list,
+        samples_filepath: Path = None, sampling=None, diff_ras_out_filename='val.tif', out_csv_filename='val.csv',
+        ex_filepath=None, aoi_filepath=None):
     """
     Runs a validation workflow.
 
     Parameters
     ----------
-    input_data_filepaths: list, str
+    input_data_filepaths: list[Path], Path
         Paths of binary classified raster tiff files.
-    ref_data_filepath: str
+    ref_data_filepath: Path
         Path of reference data.
-    out_dirpath: str
+    out_dirpath: Path
         Path of the output directory.
     metrics_list: list, str
         List of metric (function) keys defined in abcraster.metrics.metrics dictionary.
-    samples_filepath: str, optional
+    samples_filepath: Path, optional
         Path of sampling raster or None if no sampling should be performed (default: None).
     sampling: list, tuple or int, optional
         stratified sampling = list/tuple of number samples, matching iterable index to class encoding
@@ -223,18 +223,12 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
         *sampling is superseded if samples_filepath is None
     diff_ras_out_filename: str, optional
         Output path of the difference layer file (default: 'val.tif').
-    reproj_add_str: str, optional
-            String which will be added to the filename of vector or raster files after reprojecting (default: 'reproj').
-    rasterized_add_str: str, optional
-        String which is added to the filename of a vector file after being rasterized (default: 'rasterized').
     out_csv_filename: str, optional
         Output path of the validation measures as csv file. If set to None, no csv file is written (default: 'val.csv').
-    ex_filepath: str, optional
+    ex_filepath: Path, optional
         Path of the exclusion layer which is not applied if set to None (default: None).
-    aoi_filepath: str, optional
+    aoi_filepath: Path, optional
         Path of the AOI layer which is not applied if set to None (default: None).
-    delete_tmp_files: bool, optional
-        Option to delete all temporary files (default: False).
 
     Returns
     -------
@@ -242,10 +236,7 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
         Dataframe containing the resulting validation measures. df is printed and written to csv TODO: fix output logic
     """
 
-    ref_data_filepath_current = ref_data_filepath  # temporary place holder
-    delete_tmp_files_current = False  # by default retain temporary files to reuse for subsequent runs
     num_inputs = len(input_data_filepaths)
-
     results = []
     cols = ['input file', 'reference file']
 
@@ -256,18 +247,9 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
     for i in range(num_inputs):
         input_data_filepath = input_data_filepaths[i]
 
-        input_base_filename = os.path.basename(input_data_filepath)
-        ref_base_filename = os.path.basename(ref_data_filepath)
-
-        if ex_filepath is None and aoi_filepath is None:
-            clip2bbox = True
-        else:
-            clip2bbox = False
-
         # initialize validation object
-        v = Validation(input_data_filepath, ref_data_filepath=ref_data_filepath_current, out_dirpath=out_dirpath,
-                       reproj_add_str=reproj_add_str, rasterized_add_str=rasterized_add_str,
-                       delete_tmp_files=delete_tmp_files_current, ref_data_nodata=255, clip2bbox=clip2bbox)
+        v = Validation(input_data_filepath, ref_data_filepath=input_data_filepath, out_dirpath=out_dirpath,
+                       ref_data_nodata=255)
 
         # apply exclusion mask
         if ex_filepath is not None:
@@ -290,12 +272,12 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
         if num_inputs > 1:
             # overrride output file name
             # naming the output files based on input and reference
-            diff_ras_out_filename = os.path.join(out_dirpath, '{}--{}.tif'.format(input_base_filename.split('.')[0],
-                                                                                ref_base_filename.split('.')[0]))
+            diff_ras_out_filename = out_dirpath / '{}--{}.tif'.format(input_data_filepath.stem,
+                                                                      ref_data_filepath.stem)
 
-        v.write_confusion_map(os.path.join(out_dirpath, diff_ras_out_filename))
+        v.write_confusion_map(out_dirpath / diff_ras_out_filename)
 
-        result = [input_base_filename, ref_base_filename]
+        result = [input_data_filepath.name, ref_data_filepath.name]
 
         # computes the selected metrics
         for m in metrics_list:
@@ -303,25 +285,13 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
             result += [v.calculate_accuracy_metric(metric)]
         results += [result]
 
-        ref_file_ext = os.path.splitext(os.path.basename(ref_data_filepath))[1]
-        if ref_file_ext == '.shp':
-            v_rasterized_path = update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
-                                                new_root=out_dirpath)
-            ref_data_filepath_current = v_rasterized_path  # use the temporary rasterized reference
-
-        if i == num_inputs - 1:  # if last run use delete flag from cli
-            if delete_tmp_files:
-                v_rasterized_path = update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
-                                                    new_root=out_dirpath)
-                os.remove(v_rasterized_path)
-
     if num_inputs == 1:  # changed output format for multiple results
         df = pd.DataFrame(results[0], cols)
         print(df)
     else:
         df = pd.DataFrame(results, columns=cols)
 
-    df.to_csv(os.path.join(out_dirpath, out_csv_filename))
+    df.to_csv(out_dirpath / out_csv_filename)
 
     return df
 
@@ -344,7 +314,7 @@ def command_line_interface():
     parser.add_argument("-aoi", "--aoi_filepath",
                         help="Full file path to the binary aoi data 1= aoi, can be a shapefile that is rasterized.",
                         required=False, type=str)
-    parser.add_argument("-ns", "--num_samples",
+    parser.add_argument("-nrs", "--num_samples",
                         help="number of total samples if sampling will be applied.", required=False, type=int)
     parser.add_argument("-stf", "--stratify", help="Stratification based on reference data", required=False,
                         default=True, action="store_true")
@@ -358,8 +328,6 @@ def command_line_interface():
                         help="Full file path to the final difference raster", required=True, type=str)
     parser.add_argument("-csv", "--output_csv",
                         help="Full file path to the csv results", required=False, type=str)
-    parser.add_argument("-del", "--delete_tmp",
-                        help="Option to delete temporary files.", required=False, type=bool)
     parser.add_argument("-all", "--all_metrics", help="Option to compute all metrics.",
                         default=True, action="store_true")
     parser.add_argument('-na', "--not_all_metrics", dest='all_metrics', action='store_false',
@@ -370,15 +338,15 @@ def command_line_interface():
     # collect inputs
     args = parser.parse_args()
     input_raster_filepaths = args.input_filepaths
-    exclusion_filepath = args.exclusion_filepath
-    aoi_filepath = args.aoi_filepath
-    validation_filepath = args.reference_filepath
-    output_raster_filepath = args.output_raster
-    output_csv_filepath = args.output_csv
-    delete_tmp = args.delete_tmp
+    input_raster_filepaths = [Path(fp) for fp in args.input_filepaths]
+    exclusion_filepath = Path(args.exclusion_filepath)
+    aoi_filepath = Path(args.aoi_filepath)
+    validation_filepath = Path(args.reference_filepath)
+    output_raster_filepath = Path(args.output_raster)
+    output_csv_filepath = Path(args.output_csv)
     strat = args.stratify
     sampling = args.num_samples
-    samples_filepath = args.samples_filepath
+    samples_filepath = Path(args.samples_filepath)
 
     if args.all_metrics:
         metrics_list = metrics.keys()  # all metrics as defined in metrics dictionary
@@ -410,15 +378,11 @@ def command_line_interface():
             sampling = None
 
     # define output names
-    out_dirpath, out_raster_filename = os.path.split(output_raster_filepath)
-
-    # set default option
-    if delete_tmp is None:
-        delete_tmp = False
+    out_dirpath, out_raster_filename = output_raster_filepath.parent, output_raster_filepath.name
 
     run(input_data_filepaths=input_raster_filepaths, ref_data_filepath=validation_filepath, out_dirpath=out_dirpath,
         diff_ras_out_filename=out_raster_filename, out_csv_filename=output_csv_filepath, ex_filepath=exclusion_filepath,
-        aoi_filepath=aoi_filepath, delete_tmp_files=delete_tmp, sampling=sampling, samples_filepath=samples_filepath,
+        aoi_filepath=aoi_filepath, sampling=sampling, samples_filepath=samples_filepath,
         metrics_list=metrics_list)
 
 
