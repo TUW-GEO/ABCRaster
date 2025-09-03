@@ -2,11 +2,11 @@ import argparse
 import geopandas as gpd
 import rioxarray
 import numpy as np
+import xarray as xr
 import pandas as pd
 from pathlib import Path
 from abcraster.sampling import gen_random_sample
 from abcraster.metrics import metrics
-from abcraster.output import write_raster
 from abcraster.input import rasterize_to_rioxarray
 
 
@@ -164,6 +164,14 @@ class Validation:
         # run function
         return metric_func(conf)
 
+    def write_output_file(self, out_arr, out_fpath):
+        if isinstance(out_arr, np.ndarray):
+            out_ds = self.input_ds.copy(deep=True)
+            out_ds.values = out_arr
+            out_ds.rio.to_raster(out_fpath)
+        elif isinstance(out_arr, xr.DataArray):
+            out_arr.rio.to_raster(out_fpath)
+
     def write_valid_array(self, valid_filepath):
         """
         Writes binary array, which indicates the valid pixels of the validation effort.
@@ -174,8 +182,8 @@ class Validation:
             Path of the output file.
         """
 
-        valid = np.logical_and(self.ref_data != 255, self.input_data != 255)
-        write_raster(arr=valid, out_filepath=valid_filepath, sref=self.sref, gt=self.gt, nodata=255)
+        valid = np.logical_and(self.ref_ds.values != 255, self.input_ds.values != 255)
+        self.write_output_file(valid, valid_filepath)
 
     def write_confusion_map(self, out_filepath):
         """
@@ -187,7 +195,7 @@ class Validation:
             Path of the output file.
         """
 
-        write_raster(arr=self.confusion_map, out_filepath=out_filepath, sref=self.sref, gt=self.gt, nodata=255)
+        self.write_output_file(self.confusion_map, out_filepath)
 
 
 def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samples_filepath=None, sampling=None,
