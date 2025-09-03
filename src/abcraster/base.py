@@ -138,7 +138,7 @@ class Validation:
             ex_mask = ex_mask == 1
         if self.confusion_map is not None:
             self.confusion_map[ex_mask.values] = 255
-        self.input_ds = self.input_ds.where(ex_mask, self.input_ds.rio.nodata)
+        self.input_ds = self.input_ds.where(~ex_mask, self.input_ds.rio.nodata)
 
     def calculate_accuracy_metric(self, metric_func):
         """
