@@ -1,60 +1,49 @@
-import os
 import argparse
 import geopandas as gpd
 import rioxarray
 import numpy as np
 import pandas as pd
+from pathlib import Path
 from abcraster.sampling import gen_random_sample
 from abcraster.metrics import metrics
 from abcraster.output import write_raster
-from abcraster.input import rasterize_to_rioxarray, update_filepath
+from abcraster.input import rasterize_to_rioxarray
 
 
 class Validation:
     """Class to perform a validation of binary classification results."""
 
-    def __init__(self, input_data_filepath, ref_data_filepath, out_dirpath, reproj_add_str='reproj',
-                 rasterized_add_str='rasterized', delete_tmp_files=False, ras_data_nodata=255,
-                 ref_data_nodata=255, clip2bbox=False):
+    def __init__(self, input_data_filepath: Path, ref_data_filepath: Path, out_dirpath: Path,
+                 ras_data_nodata: int = 255, ref_data_nodata: int = 255):
         """
-        Loads and harmonizes the classification resultan d reference data.
+        Loads and harmonizes the classification result and reference data.
 
         Parameters
         ----------
-        input_data_filepath: str
+        input_data_filepath: Path
             Path of binary classified raster tiff file.
-        ref_data_filepath: str
+        ref_data_filepath: Path
             Path of reference data.
-        out_dirpath: str
+        out_dirpath: Path
             Path of the output directory.
-        reproj_add_str: str, optional
-            String which will be added to the filename of vector or raster files after reprojecting (default: 'reproj').
-        rasterized_add_str: str, optional
-            String which is added to the filename of a vector file after being rasterized (default: 'rasterized').
-        delete_tmp_files: bool, optional
-            Option to delete all temporary files (default: False).
         ras_data_nodata: int, optional
             No data value of the classification result (default: 255).
         ref_data_nodata: int, optional
             No data value of the reference data (default: 255).
-        clip2bbox: bool, optional
-            Clip rasterized reference vector to feature extents i.e. set nodata outside (default: False).
         """
 
-        ref_file_ext = os.path.splitext(os.path.basename(ref_data_filepath))[1]
-
-        if ref_file_ext == '.shp':
+        if ref_data_filepath.suffix == '.shp':
             ref_vec_data = gpd.read_file(ref_data_filepath)
             self.input_ds = rioxarray.open_rasterio(input_data_filepath)
             self.ref_ds = rasterize_to_rioxarray(vec_gpf=ref_vec_data, riox_arr=self.input_ds)
 
-        elif ref_file_ext == '.tif':
+        elif ref_data_filepath.suffix == '.tif':
             self.input_ds = rioxarray.open_rasterio(input_data_filepath)
             self.ref_ds = rioxarray.open_rasterio(ref_data_filepath)
             self.ref_ds = self.ref_ds.rio.reproject_match(self.input_ds)
 
         else:
-            raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
+            raise ValueError("Input file with extension " + ref_data_filepath.suffix + " is not supported.")
 
         # define further attributes
         self.input_path = input_data_filepath
@@ -64,8 +53,6 @@ class Validation:
         self.input_nodata = ras_data_nodata
         self.ref_nodata = ref_data_nodata
         self.out_dirpath = out_dirpath
-        self.reproj_add_str = reproj_add_str
-        self.rasterized_add_str = rasterized_add_str
 
     def accuracy_assessment(self):
         """Runs validation on aligned numpy arrays."""
@@ -120,28 +107,27 @@ class Validation:
         with rasterio.open(samples_filepath) as input_ds:
             self.samples = input_ds.read()[0, ...]
 
-    def apply_mask(self, mask_path, invert_mask=False):
+    def apply_mask(self, mask_path: Path, invert_mask=False):
         """
         Apply a raster or vector mask to the input data.
 
         Parameters
         ----------
-        mask_path: str
+        mask_path: Path
             Path of the mask to be applied.
         invert_mask: bool, optional
             Option to invert the passed mask (default: False).
         """
 
         # load mask layer
-        mask_ext = os.path.splitext(os.path.basename(mask_path))[1]
-        if mask_ext == '.shp':
+        if mask_path.suffix == '.shp':
             mask_vec_data = gpd.read_file(mask_path)
             ex_mask = rasterize_to_rioxarray(vec_gpf=mask_vec_data, riox_arr=self.input_ds)
-        elif mask_ext == '.tif':
+        elif mask_path.suffix == '.tif':
             ex_mask = rioxarray.open_rasterio(mask_path)
             ex_mask = ex_mask.rio.reproject_match(self.input_ds)
         else:
-            raise ValueError("Input file with extension " + mask_ext + " is not supported.")
+            raise ValueError("Input file with extension " + mask_path.suffix + " is not supported.")
 
         # apply mask
         if invert_mask:
