@@ -7,7 +7,7 @@ import pandas as pd
 from pathlib import Path
 from abcraster.sampling import gen_random_sample
 from abcraster.metrics import metrics
-from abcraster.input import rasterize_to_rioxarray
+from abcraster.input import rasterize_to_rioxarray, ensure_path
 
 
 class Validation:
@@ -20,17 +20,21 @@ class Validation:
 
         Parameters
         ----------
-        input_data_filepath: Path
+        input_data_filepath: Path or str
             Path of binary classified raster tiff file.
-        ref_data_filepath: Path
+        ref_data_filepath: Path or str
             Path of reference data.
-        out_dirpath: Path
+        out_dirpath: Path or str
             Path of the output directory.
         ras_data_nodata: int, optional
             No data value of the classification result (default: 255).
         ref_data_nodata: int, optional
             No data value of the reference data (default: 255).
         """
+
+        input_data_filepath = ensure_path(input_data_filepath)
+        ref_data_filepath = ensure_path(ref_data_filepath)
+        out_dirpath = ensure_path(out_dirpath)
 
         if ref_data_filepath.suffix == '.shp':
             ref_vec_data = gpd.read_file(ref_data_filepath)
@@ -99,6 +103,7 @@ class Validation:
 
         # write output
         if samples_filepath is not None:
+            samples_filepath = ensure_path(samples_filepath)
             self.write_output_file(self.samples, samples_filepath)
 
     def load_sampling(self, samples_filepath):
@@ -119,6 +124,7 @@ class Validation:
         """
 
         # load mask layer
+        mask_path = ensure_path(mask_path)
         if mask_path.suffix == '.shp':
             mask_vec_data = gpd.read_file(mask_path)
             ex_mask = rasterize_to_rioxarray(vec_gpf=mask_vec_data, riox_arr=self.input_ds)
@@ -181,7 +187,7 @@ class Validation:
             Path of the output file.
         """
 
-        valid = np.logical_and(self.ref_ds.values != 255, self.input_ds.values != 255)
+        valid = np.logical_and(self.ref_ds.values != 255, self.input_ds.values != 255).astype(np.uint8)
         self.write_output_file(valid, valid_filepath)
 
     def write_confusion_map(self, out_filepath):
@@ -235,6 +241,9 @@ def run(input_data_filepaths, ref_data_filepath: Path, out_dirpath: Path, metric
         Dataframe containing the resulting validation measures. df is printed and written to csv TODO: fix output logic
     """
 
+    input_data_filepaths = [ensure_path(idf) for idf in input_data_filepaths]
+    ref_data_filepath = ensure_path(ref_data_filepath)
+    out_dirpath = ensure_path(out_dirpath)
     num_inputs = len(input_data_filepaths)
     results = []
     cols = ['input file', 'reference file']

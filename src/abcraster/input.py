@@ -6,7 +6,7 @@ from shapely.ops import unary_union
 import geopandas as gpd
 import xarray as xr
 import numpy as np
-import os
+from pathlib import Path
 
 
 def rasterize_to_rioxarray(vec_gpf: gpd.GeoDataFrame, riox_arr: xr.DataArray) -> xr.DataArray:
@@ -25,3 +25,10 @@ def rasterize_to_rioxarray(vec_gpf: gpd.GeoDataFrame, riox_arr: xr.DataArray) ->
     rasterized = rasterized.expand_dims(band=[1], axis=0)
 
     return rasterized
+
+
+def ensure_path(path_or_str):
+    if isinstance(path_or_str, Path):
+        return path_or_str
+    else:
+        return Path(path_or_str)
