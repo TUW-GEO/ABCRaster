@@ -23,6 +23,7 @@ def rasterize_to_rioxarray(vec_gpf: gpd.GeoDataFrame, riox_arr: xr.DataArray) ->
     )
     rasterized = rasterized.astype(np.uint8)
     rasterized = rasterized.expand_dims(band=[1], axis=0)
+    rasterized = rasterized.rio.reproject_match(riox_arr)
 
     return rasterized
 

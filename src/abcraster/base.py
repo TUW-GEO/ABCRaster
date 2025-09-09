@@ -36,8 +36,10 @@ class Validation:
         out_dirpath = ensure_path(out_dirpath)
 
         if ref_data_filepath.suffix == '.shp':
-            ref_vec_data = gpd.read_file(ref_data_filepath)
             self.input_ds = rioxarray.open_rasterio(input_data_filepath)
+            ref_vec_data = gpd.read_file(ref_data_filepath)
+            if ref_vec_data.crs != self.input_ds.rio.crs:
+                ref_vec_data = ref_vec_data.to_crs(self.input_ds.rio.crs)
             self.ref_ds = rasterize_to_rioxarray(vec_gpf=ref_vec_data, riox_arr=self.input_ds)
 
         elif ref_data_filepath.suffix == '.tif':
@@ -124,6 +126,8 @@ class Validation:
         mask_path = ensure_path(mask_path)
         if mask_path.suffix == '.shp':
             mask_vec_data = gpd.read_file(mask_path)
+            if mask_vec_data.crs != self.input_ds.rio.crs:
+                mask_vec_data = mask_vec_data.to_crs(self.input_ds.rio.crs)
             ex_mask = rasterize_to_rioxarray(vec_gpf=mask_vec_data, riox_arr=self.input_ds)
         elif mask_path.suffix == '.tif':
             ex_mask = rioxarray.open_rasterio(mask_path)
