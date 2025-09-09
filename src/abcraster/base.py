@@ -257,7 +257,7 @@ def run(input_data_filepaths, ref_data_filepath: Path, out_dirpath: Path, metric
         input_data_filepath = input_data_filepaths[i]
 
         # initialize validation object
-        v = Validation(input_data_filepath, ref_data_filepath=input_data_filepath, out_dirpath=out_dirpath)
+        v = Validation(input_data_filepath, ref_data_filepath=ref_data_filepath, out_dirpath=out_dirpath)
 
         # apply exclusion mask
         if ex_filepath is not None:
