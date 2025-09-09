@@ -1,6 +1,7 @@
 import argparse
 import rioxarray
 import numpy as np
+from abcraster.input import ensure_path
 
 
 def gen_random_sample(num_samples, data, ref, nodata=255, exclusion=None):
@@ -127,11 +128,11 @@ def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255, ex_pat
         - value in singletons i.e. [N] are treated as the total number of samples for all classes and would be equally
         distributed hence should be divisible by the number of classes. num classes detected from reference data values.
         - for non-stratified sampling pass an int.
-    data_path: str
+    data_path: str or Path
         file path to classified raster data (*.tif), uint encoded
-    ref_path: str
+    ref_path: str or Path
         file path to reference raster data (*.tif), unit encoded
-    out_path: str
+    out_path: str or Path
         file path to output sampling raster data (*.tif), unit encoded
     nodata: int (default == 255)
         no data value.
@@ -142,6 +143,10 @@ def main_sampling(num_samples, data_path, ref_path, out_path, nodata=255, ex_pat
     -------
     None
     """
+
+    data_path = ensure_path(data_path)
+    ref_path = ensure_path(ref_path)
+    out_path = ensure_path(out_path)
 
     input_data = rioxarray.open_rasterio(data_path)
     ref_data = rioxarray.open_rasterio(ref_path)
