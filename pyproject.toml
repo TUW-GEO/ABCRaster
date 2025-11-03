@@ -23,6 +23,9 @@ classifiers = [
 [project.urls]
 Repository = "https://github.com/TUW-GEO/ABCRaster"
 
+[project.scripts]
+abcraster = "abcraster.cli:main"
+
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
