@@ -7,7 +7,7 @@ import pandas as pd
 import rasterio as rio
 from shapely.geometry import box
 
-from abcraster.input import rasterize, raster_reproject, update_filepath
+from abcraster.input import rasterize, rasterize_by_raster, raster_reproject, update_filepath
 from abcraster.sampling import gen_random_sample
 from abcraster.metrics import metrics
 from abcraster.output import write_raster
@@ -57,8 +57,9 @@ class Validation:
             # rasterize vector-based reference data
             v_rasterized_path = update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
                                                  new_root=out_dirpath)
-            self.ref_data = rasterize(vec_path=ref_data_filepath, out_ras_path=v_rasterized_path,
-                                      ras_path=input_data_filepath, nodata=ref_data_nodata, clip2bbox=clip2bbox)
+            self.ref_data = rasterize_by_raster(vec_path=ref_data_filepath, out_ras_path=v_rasterized_path,
+                                                ras_path=input_data_filepath, nodata=ref_data_nodata,
+                                                clip2bbox=clip2bbox)
 
             # delete temporary files if requested
             if delete_tmp_files:
@@ -171,7 +172,8 @@ class Validation:
         if mask_ext == '.shp':
             v_rasterized_path = update_filepath(mask_path, add_str=self.rasterized_add_str, new_ext='tif',
                                                 new_root=self.out_dirpath)
-            ex_mask = rasterize(vec_path=mask_path, out_ras_path=v_rasterized_path, ras_path=self.input_path)
+            ex_mask = rasterize(vec_path=mask_path, out_ras_path=v_rasterized_path, out_sref=self.sref,
+                                out_shape=self.input_data.shape, out_transform=self.gt)
         elif mask_ext == '.tif':
             with rio.open(mask_path) as mask_ds:
                 if self.sref != mask_ds.crs or float(self.gt.to_gdal()[1]) != float(mask_ds.res[0]):
