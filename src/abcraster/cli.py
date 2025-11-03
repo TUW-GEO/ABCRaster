@@ -47,14 +47,14 @@ def main():
     args = parser.parse_args()
     input_raster_filepaths = args.input_filepaths
     input_raster_filepaths = [Path(fp) for fp in args.input_filepaths]
-    exclusion_filepath = Path(args.exclusion_filepath)
+    exclusion_filepath = Path(args.exclusion_filepath) if args.exclusion_filepath else None
     aoi_filepath = Path(args.aoi_filepath)
     validation_filepath = Path(args.reference_filepath)
     output_raster_filepath = Path(args.output_raster)
     output_csv_filepath = Path(args.output_csv)
     strat = args.stratify
     sampling = args.num_samples
-    samples_filepath = Path(args.samples_filepath)
+    samples_filepath = Path(args.samples_filepath) if args.samples_filepath else None
 
     if args.all_metrics:
         metrics_list = metrics.keys()  # all metrics as defined in metrics dictionary
