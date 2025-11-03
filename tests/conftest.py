@@ -2,9 +2,19 @@ import pytest
 from pathlib import Path
 
 
+APPROVAL_TEST_DATA_ROOT_OPTION = "--approval-test-data-root"
+
+
+def pytest_addoption(parser):
+    parser.addoption(APPROVAL_TEST_DATA_ROOT_OPTION, default=None, help="specify local approval test data root")
+
+
 @pytest.fixture
-def approval_input_directory():
-    return Path(r'/eodc/private/tuwgeo/software/ci/abcraster/input')
+def approval_input_directory(pytestconfig):
+    cmd_root = pytestconfig.getoption(APPROVAL_TEST_DATA_ROOT_OPTION, default=None)
+    if cmd_root:
+        return Path(cmd_root)
+    return Path(__file__).parent / "test_data"
 
 
 @pytest.fixture
