@@ -1,114 +1,69 @@
-import os
 import argparse
-
-import rasterio
+import geopandas as gpd
+import rioxarray
 import numpy as np
+import xarray as xr
 import pandas as pd
-import rasterio as rio
-from shapely.geometry import box
-
-from abcraster.input import rasterize, rasterize_by_raster, raster_reproject, update_filepath
+from pathlib import Path
 from abcraster.sampling import gen_random_sample
 from abcraster.metrics import metrics
-from abcraster.output import write_raster
+from abcraster.input import rasterize_to_rioxarray, ensure_path
 
 
 class Validation:
     """Class to perform a validation of binary classification results."""
 
-    def __init__(self, input_data_filepath, ref_data_filepath, out_dirpath, reproj_add_str='reproj',
-                 rasterized_add_str='rasterized', delete_tmp_files=False, ras_data_nodata=255,
-                 ref_data_nodata=255, clip2bbox=False):
+    def __init__(self, input_data_filepath: Path, ref_data_filepath: Path, out_dirpath: Path):
         """
-        Loads and harmonizes the classification resultan d reference data.
+        Loads and harmonizes the classification result and reference data.
 
         Parameters
         ----------
-        input_data_filepath: str
+        input_data_filepath: Path or str
             Path of binary classified raster tiff file.
-        ref_data_filepath: str
+        ref_data_filepath: Path or str
             Path of reference data.
-        out_dirpath: str
+        out_dirpath: Path or str
             Path of the output directory.
-        reproj_add_str: str, optional
-            String which will be added to the filename of vector or raster files after reprojecting (default: 'reproj').
-        rasterized_add_str: str, optional
-            String which is added to the filename of a vector file after being rasterized (default: 'rasterized').
-        delete_tmp_files: bool, optional
-            Option to delete all temporary files (default: False).
         ras_data_nodata: int, optional
             No data value of the classification result (default: 255).
         ref_data_nodata: int, optional
             No data value of the reference data (default: 255).
-        clip2bbox: bool, optional
-            Clip rasterized reference vector to feature extents i.e. set nodata outside (default: False).
         """
 
-        ref_file_ext = os.path.splitext(os.path.basename(ref_data_filepath))[1]
+        input_data_filepath = ensure_path(input_data_filepath)
+        ref_data_filepath = ensure_path(ref_data_filepath)
+        out_dirpath = ensure_path(out_dirpath)
 
-        if ref_file_ext == '.shp':
-            # load classification result
-            with rasterio.open(input_data_filepath) as input_ds:
-                self.input_data = input_ds.read()[0, ...]
-                self.gt = input_ds.transform
-                self.sref = input_ds.crs
-                self.bounds = input_ds.bounds
+        if ref_data_filepath.suffix == '.shp':
+            self.input_ds = rioxarray.open_rasterio(input_data_filepath)
+            ref_vec_data = gpd.read_file(ref_data_filepath)
+            if ref_vec_data.crs != self.input_ds.rio.crs:
+                ref_vec_data = ref_vec_data.to_crs(self.input_ds.rio.crs)
+            self.ref_ds = rasterize_to_rioxarray(vec_gpf=ref_vec_data, riox_arr=self.input_ds)
 
-            # rasterize vector-based reference data
-            v_rasterized_path = update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
-                                                 new_root=out_dirpath)
-            self.ref_data = rasterize_by_raster(vec_path=ref_data_filepath, out_ras_path=v_rasterized_path,
-                                                ras_path=input_data_filepath, nodata=ref_data_nodata,
-                                                clip2bbox=clip2bbox)
-
-            # delete temporary files if requested
-            if delete_tmp_files:
-                os.remove(v_rasterized_path)
-
-        elif ref_file_ext == '.tif':
-            with rio.open(input_data_filepath) as input_ds:
-                with rio.open(ref_data_filepath) as ref_ds:
-                    if input_ds.crs != ref_ds.crs or input_ds.res[0] != ref_ds.res[0]:
-                        ref_data_filepath = raster_reproject(ref_data_filepath, input_ds.crs.to_wkt(),
-                                                             input_ds.res[0], out_dirpath, reproj_add_str)  # TODO: replace this with rasterio.warp function?
-
-                with rio.open(ref_data_filepath) as ref_ds:
-                    ext1 = box(*input_ds.bounds)
-                    ext2 = box(*ref_ds.bounds)
-                    if not ext1.intersects(ext2):
-                        raise Exception("The two rasters do not intersect.")
-                    intersection = ext1.intersection(ext2)
-                    win1 = rio.windows.from_bounds(*intersection.bounds, input_ds.transform)
-                    win2 = rio.windows.from_bounds(*intersection.bounds, ref_ds.transform)
-
-                    self.input_data = input_ds.read(window=win1)[0, ...]
-                    self.ref_data = ref_ds.read(window=win2)[0, ...]
-                    inst_trans = input_ds.window_transform(win1)
-                    self.gt = inst_trans
-                    self.sref = input_ds.crs
-                    self.bounds = intersection.bounds
+        elif ref_data_filepath.suffix == '.tif':
+            self.input_ds = rioxarray.open_rasterio(input_data_filepath)
+            self.ref_ds = rioxarray.open_rasterio(ref_data_filepath)
+            self.ref_ds = self.ref_ds.rio.reproject_match(self.input_ds)
 
         else:
-            raise ValueError("Input file with extension " + ref_file_ext + " is not supported.")
+            raise ValueError("Input file with extension " + ref_data_filepath.suffix + " is not supported.")
 
         # define further attributes
         self.input_path = input_data_filepath
         self.samples = None
         self.confusion_matrix = None
         self.confusion_map = None
-        self.input_nodata = ras_data_nodata
-        self.ref_nodata = ref_data_nodata
         self.out_dirpath = out_dirpath
-        self.reproj_add_str = reproj_add_str
-        self.rasterized_add_str = rasterized_add_str
 
     def accuracy_assessment(self):
         """Runs validation on aligned numpy arrays."""
 
         # calculating difference between classification and reference
-        res = 1 + (2 * self.input_data) - self.ref_data
-        res[self.input_data == self.input_nodata] = 255
-        res[self.ref_data == self.ref_nodata] = 255
+        res = 1 + (2 * self.input_ds.values) - self.ref_ds.values
+        res[self.input_ds.values == self.input_ds.rio.nodata] = 255
+        res[self.ref_ds.values == self.ref_ds.rio.nodata] = 255
         self.confusion_map = res
 
         # apply sampling
@@ -143,56 +98,42 @@ class Validation:
         """
 
         # performs sampling
-        self.samples = gen_random_sample(sampling, self.input_data, self.ref_data, nodata=255)
+        self.samples = gen_random_sample(sampling, self.input_ds.values, self.ref_ds.values, nodata=255)
 
         # write output
         if samples_filepath is not None:
-            write_raster(arr=self.samples, out_filepath=samples_filepath, sref=self.sref, gt=self.gt, nodata=255)
+            samples_filepath = ensure_path(samples_filepath)
+            self.write_output_file(self.samples, samples_filepath)
 
     def load_sampling(self, samples_filepath):
         """Loads the samples from a raster file."""
 
-        with rasterio.open(samples_filepath) as input_ds:
-            self.samples = input_ds.read()[0, ...]
+        self.samples = rioxarray.open_rasterio(samples_filepath).values
 
-    def apply_mask(self, mask_path, invert_mask=False):
+    def apply_mask(self, mask_path: Path, invert_mask=False):
         """
         Apply a raster or vector mask to the input data.
 
         Parameters
         ----------
-        mask_path: str
+        mask_path: Path
             Path of the mask to be applied.
         invert_mask: bool, optional
             Option to invert the passed mask (default: False).
         """
 
         # load mask layer
-        mask_ext = os.path.splitext(os.path.basename(mask_path))[1]
-        if mask_ext == '.shp':
-            v_rasterized_path = update_filepath(mask_path, add_str=self.rasterized_add_str, new_ext='tif',
-                                                new_root=self.out_dirpath)
-            ex_mask = rasterize(vec_path=mask_path, out_ras_path=v_rasterized_path, out_sref=self.sref,
-                                out_shape=self.input_data.shape, out_transform=self.gt)
-        elif mask_ext == '.tif':
-            with rio.open(mask_path) as mask_ds:
-                if self.sref != mask_ds.crs or float(self.gt.to_gdal()[1]) != float(mask_ds.res[0]):
-                    mask_path = raster_reproject(mask_path, self.sref.to_wkt(), int(self.gt.to_gdal()[1]),
-                                                 self.out_dirpath, self.reproj_add_str)
-
-            with rio.open(mask_path) as mask_ds:
-                if self.gt != mask_ds.transform:
-                    mask_ext = box(*mask_ds.bounds)
-                    input_ext = box(*self.bounds)
-                    if not mask_ext.intersects(input_ext):
-                        raise Exception("Mask does not match the classification data.")
-                    wind = rio.windows.from_bounds(*self.bounds, mask_ds.transform)
-                    ex_mask = mask_ds.read(window=wind)[0, ...]
-                else:
-                    ex_mask = mask_ds.read()[0, ...]
-
+        mask_path = ensure_path(mask_path)
+        if mask_path.suffix == '.shp':
+            mask_vec_data = gpd.read_file(mask_path)
+            if mask_vec_data.crs != self.input_ds.rio.crs:
+                mask_vec_data = mask_vec_data.to_crs(self.input_ds.rio.crs)
+            ex_mask = rasterize_to_rioxarray(vec_gpf=mask_vec_data, riox_arr=self.input_ds)
+        elif mask_path.suffix == '.tif':
+            ex_mask = rioxarray.open_rasterio(mask_path)
+            ex_mask = ex_mask.rio.reproject_match(self.input_ds)
         else:
-            raise ValueError("Input file with extension " + mask_ext + " is not supported.")
+            raise ValueError("Input file with extension " + mask_path.suffix + " is not supported.")
 
         # apply mask
         if invert_mask:
@@ -200,8 +141,8 @@ class Validation:
         else:
             ex_mask = ex_mask == 1
         if self.confusion_map is not None:
-            self.confusion_map[ex_mask] = 255
-        self.input_data[ex_mask] = 255
+            self.confusion_map[ex_mask.values] = 255
+        self.input_ds = self.input_ds.where(~ex_mask, self.input_ds.rio.nodata)
 
     def calculate_accuracy_metric(self, metric_func):
         """
@@ -229,6 +170,14 @@ class Validation:
         # run function
         return metric_func(conf)
 
+    def write_output_file(self, out_arr, out_fpath):
+        if isinstance(out_arr, np.ndarray):
+            out_ds = self.input_ds.copy(deep=True)
+            out_ds.values = out_arr
+            out_ds.rio.to_raster(out_fpath)
+        elif isinstance(out_arr, xr.DataArray):
+            out_arr.rio.to_raster(out_fpath)
+
     def write_valid_array(self, valid_filepath):
         """
         Writes binary array, which indicates the valid pixels of the validation effort.
@@ -239,8 +188,8 @@ class Validation:
             Path of the output file.
         """
 
-        valid = np.logical_and(self.ref_data != 255, self.input_data != 255)
-        write_raster(arr=valid, out_filepath=valid_filepath, sref=self.sref, gt=self.gt, nodata=255)
+        valid = np.logical_and(self.ref_ds.values != 255, self.input_ds.values != 255).astype(np.uint8)
+        self.write_output_file(valid, valid_filepath)
 
     def write_confusion_map(self, out_filepath):
         """
@@ -252,26 +201,26 @@ class Validation:
             Path of the output file.
         """
 
-        write_raster(arr=self.confusion_map, out_filepath=out_filepath, sref=self.sref, gt=self.gt, nodata=255)
+        self.write_output_file(self.confusion_map, out_filepath)
 
 
-def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samples_filepath=None, sampling=None,
-        diff_ras_out_filename='val.tif', reproj_add_str='reproj', rasterized_add_str='rasterized',
-        out_csv_filename='val.csv', ex_filepath=None, aoi_filepath=None, delete_tmp_files=False):
+def run(input_data_filepaths, ref_data_filepath: Path, out_dirpath: Path, metrics_list: list,
+        samples_filepath: Path = None, sampling=None, diff_ras_out_filename='val.tif', out_csv_filename='val.csv',
+        ex_filepath=None, aoi_filepath=None):
     """
     Runs a validation workflow.
 
     Parameters
     ----------
-    input_data_filepaths: list, str
+    input_data_filepaths: list[Path], Path
         Paths of binary classified raster tiff files.
-    ref_data_filepath: str
+    ref_data_filepath: Path
         Path of reference data.
-    out_dirpath: str
+    out_dirpath: Path
         Path of the output directory.
     metrics_list: list, str
         List of metric (function) keys defined in abcraster.metrics.metrics dictionary.
-    samples_filepath: str, optional
+    samples_filepath: Path, optional
         Path of sampling raster or None if no sampling should be performed (default: None).
     sampling: list, tuple or int, optional
         stratified sampling = list/tuple of number samples, matching iterable index to class encoding
@@ -280,18 +229,12 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
         *sampling is superseded if samples_filepath is None
     diff_ras_out_filename: str, optional
         Output path of the difference layer file (default: 'val.tif').
-    reproj_add_str: str, optional
-            String which will be added to the filename of vector or raster files after reprojecting (default: 'reproj').
-    rasterized_add_str: str, optional
-        String which is added to the filename of a vector file after being rasterized (default: 'rasterized').
     out_csv_filename: str, optional
         Output path of the validation measures as csv file. If set to None, no csv file is written (default: 'val.csv').
-    ex_filepath: str, optional
+    ex_filepath: Path, optional
         Path of the exclusion layer which is not applied if set to None (default: None).
-    aoi_filepath: str, optional
+    aoi_filepath: Path, optional
         Path of the AOI layer which is not applied if set to None (default: None).
-    delete_tmp_files: bool, optional
-        Option to delete all temporary files (default: False).
 
     Returns
     -------
@@ -299,10 +242,10 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
         Dataframe containing the resulting validation measures. df is printed and written to csv TODO: fix output logic
     """
 
-    ref_data_filepath_current = ref_data_filepath  # temporary place holder
-    delete_tmp_files_current = False  # by default retain temporary files to reuse for subsequent runs
+    input_data_filepaths = [ensure_path(idf) for idf in input_data_filepaths]
+    ref_data_filepath = ensure_path(ref_data_filepath)
+    out_dirpath = ensure_path(out_dirpath)
     num_inputs = len(input_data_filepaths)
-
     results = []
     cols = ['input file', 'reference file']
 
@@ -313,18 +256,8 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
     for i in range(num_inputs):
         input_data_filepath = input_data_filepaths[i]
 
-        input_base_filename = os.path.basename(input_data_filepath)
-        ref_base_filename = os.path.basename(ref_data_filepath)
-
-        if ex_filepath is None and aoi_filepath is None:
-            clip2bbox = True
-        else:
-            clip2bbox = False
-
         # initialize validation object
-        v = Validation(input_data_filepath, ref_data_filepath=ref_data_filepath_current, out_dirpath=out_dirpath,
-                       reproj_add_str=reproj_add_str, rasterized_add_str=rasterized_add_str,
-                       delete_tmp_files=delete_tmp_files_current, ref_data_nodata=255, clip2bbox=clip2bbox)
+        v = Validation(input_data_filepath, ref_data_filepath=ref_data_filepath, out_dirpath=out_dirpath)
 
         # apply exclusion mask
         if ex_filepath is not None:
@@ -347,12 +280,12 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
         if num_inputs > 1:
             # overrride output file name
             # naming the output files based on input and reference
-            diff_ras_out_filename = os.path.join(out_dirpath, '{}--{}.tif'.format(input_base_filename.split('.')[0],
-                                                                                ref_base_filename.split('.')[0]))
+            diff_ras_out_filename = out_dirpath / '{}--{}.tif'.format(input_data_filepath.stem,
+                                                                      ref_data_filepath.stem)
 
-        v.write_confusion_map(os.path.join(out_dirpath, diff_ras_out_filename))
+        v.write_confusion_map(out_dirpath / diff_ras_out_filename)
 
-        result = [input_base_filename, ref_base_filename]
+        result = [input_data_filepath.name, ref_data_filepath.name]
 
         # computes the selected metrics
         for m in metrics_list:
@@ -360,25 +293,13 @@ def run(input_data_filepaths, ref_data_filepath, out_dirpath, metrics_list, samp
             result += [v.calculate_accuracy_metric(metric)]
         results += [result]
 
-        ref_file_ext = os.path.splitext(os.path.basename(ref_data_filepath))[1]
-        if ref_file_ext == '.shp':
-            v_rasterized_path = update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
-                                                new_root=out_dirpath)
-            ref_data_filepath_current = v_rasterized_path  # use the temporary rasterized reference
-
-        if i == num_inputs - 1:  # if last run use delete flag from cli
-            if delete_tmp_files:
-                v_rasterized_path = update_filepath(ref_data_filepath, add_str=rasterized_add_str, new_ext='tif',
-                                                    new_root=out_dirpath)
-                os.remove(v_rasterized_path)
-
     if num_inputs == 1:  # changed output format for multiple results
         df = pd.DataFrame(results[0], cols)
         print(df)
     else:
         df = pd.DataFrame(results, columns=cols)
 
-    df.to_csv(os.path.join(out_dirpath, out_csv_filename))
+    df.to_csv(out_dirpath / out_csv_filename)
 
     return df
 
@@ -401,7 +322,7 @@ def command_line_interface():
     parser.add_argument("-aoi", "--aoi_filepath",
                         help="Full file path to the binary aoi data 1= aoi, can be a shapefile that is rasterized.",
                         required=False, type=str)
-    parser.add_argument("-ns", "--num_samples",
+    parser.add_argument("-nrs", "--num_samples",
                         help="number of total samples if sampling will be applied.", required=False, type=int)
     parser.add_argument("-stf", "--stratify", help="Stratification based on reference data", required=False,
                         default=True, action="store_true")
@@ -415,8 +336,6 @@ def command_line_interface():
                         help="Full file path to the final difference raster", required=True, type=str)
     parser.add_argument("-csv", "--output_csv",
                         help="Full file path to the csv results", required=False, type=str)
-    parser.add_argument("-del", "--delete_tmp",
-                        help="Option to delete temporary files.", required=False, type=bool)
     parser.add_argument("-all", "--all_metrics", help="Option to compute all metrics.",
                         default=True, action="store_true")
     parser.add_argument('-na', "--not_all_metrics", dest='all_metrics', action='store_false',
@@ -427,15 +346,15 @@ def command_line_interface():
     # collect inputs
     args = parser.parse_args()
     input_raster_filepaths = args.input_filepaths
-    exclusion_filepath = args.exclusion_filepath
-    aoi_filepath = args.aoi_filepath
-    validation_filepath = args.reference_filepath
-    output_raster_filepath = args.output_raster
-    output_csv_filepath = args.output_csv
-    delete_tmp = args.delete_tmp
+    input_raster_filepaths = [Path(fp) for fp in args.input_filepaths]
+    exclusion_filepath = Path(args.exclusion_filepath)
+    aoi_filepath = Path(args.aoi_filepath)
+    validation_filepath = Path(args.reference_filepath)
+    output_raster_filepath = Path(args.output_raster)
+    output_csv_filepath = Path(args.output_csv)
     strat = args.stratify
     sampling = args.num_samples
-    samples_filepath = args.samples_filepath
+    samples_filepath = Path(args.samples_filepath)
 
     if args.all_metrics:
         metrics_list = metrics.keys()  # all metrics as defined in metrics dictionary
@@ -467,15 +386,11 @@ def command_line_interface():
             sampling = None
 
     # define output names
-    out_dirpath, out_raster_filename = os.path.split(output_raster_filepath)
-
-    # set default option
-    if delete_tmp is None:
-        delete_tmp = False
+    out_dirpath, out_raster_filename = output_raster_filepath.parent, output_raster_filepath.name
 
     run(input_data_filepaths=input_raster_filepaths, ref_data_filepath=validation_filepath, out_dirpath=out_dirpath,
         diff_ras_out_filename=out_raster_filename, out_csv_filename=output_csv_filepath, ex_filepath=exclusion_filepath,
-        aoi_filepath=aoi_filepath, delete_tmp_files=delete_tmp, sampling=sampling, samples_filepath=samples_filepath,
+        aoi_filepath=aoi_filepath, sampling=sampling, samples_filepath=samples_filepath,
         metrics_list=metrics_list)
 
 
